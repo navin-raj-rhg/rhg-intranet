@@ -151,6 +151,56 @@ expected content server-side. Signing up/in against a *real* Supabase
 project couldn't be tested from this sandbox (no network access to
 supabase.co here) — that part needs to be confirmed on your end.
 
+## Step 5: Cloudflare R2 storage
+
+Files (receipts, inspection photos, generated reports, etc.) are stored in a
+single R2 bucket, organised by a `toolId` prefix rather than separate
+buckets per tool (R2/S3 has no real "sub-buckets" - see the discussion that
+led to this in the project history). A key looks like:
+
+```
+expense-claims/2026/09/3f9c2b1a-...-receipt.jpg
+inspections/2026/09/9e7d4c22-...-photo.jpg
+```
+
+How it fits together:
+
+- **`server/utils/r2.ts`** - the S3 client (pointed at R2's endpoint) plus
+  three reusable functions: `buildObjectKey()`, `getUploadUrl()`,
+  `getDownloadUrl()`. Every future tool's file handling builds on these.
+- **`server/api/storage/upload-url.post.ts`** - any signed-in user can
+  request a presigned PUT URL for a *new* file under a given tool's prefix.
+  The browser then uploads directly to R2 - the file never passes through
+  our own server.
+- **`server/api/storage/download-url.get.ts`** - presigned GET URL for a
+  given key. **Important caveat:** this only checks that the caller is
+  signed in, not whether they should see that *specific* file - it's a
+  generic convenience for this stage, relying on keys being unguessable
+  UUIDs rather than real authorization. Once a tool has its own table
+  referencing a key (e.g. `expense_claims.receipt_key`), that tool's own API
+  route should check DB-level ownership/role first and call
+  `getDownloadUrl()` directly - not proxy through this generic route.
+- **`app/composables/useR2Storage.ts`** - client-side `uploadFile(toolId, file)`
+  and `getDownloadUrl(key)`, so building a tool's upload UI later is just a
+  few lines, not re-implementing this flow each time. (Named `useR2Storage`
+  rather than `useFileUpload` because Nuxt UI 4 already ships its own
+  `useFileUpload` composable for its dropzone component - this avoids
+  silently shadowing it.)
+
+**Verified:** typecheck and lint pass clean. Presigned URL generation is
+pure local signing (no network call needed to produce the URL itself), so
+this was tested directly against the AWS SDK with fake credentials and
+confirmed to produce correctly-formed, correctly-signed R2 URLs
+(`AWS4-HMAC-SHA256`, virtual-hosted-style `bucket.accountid.r2.cloudflarestorage.com`).
+Both endpoints were also confirmed to correctly reject unauthenticated
+requests. An actual authenticated upload/download round-trip against your
+*real* R2 bucket couldn't be tested from this sandbox (no network access to
+`cloudflarestorage.com` here). To confirm it on your end, a temporary
+`app/pages/test-r2.vue` page is included - visit `/test-r2` once signed in,
+pick a file, click "Upload to R2", then "Get download link" to confirm the
+full round trip. **Delete this file once you've confirmed it works** - it
+has no place in the real app.
+
 ## Notes
 
 - `.env` is gitignored — never commit real credentials. `.env.example`
