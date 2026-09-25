@@ -19,31 +19,8 @@ useSeoMeta({
 
 <template>
   <UApp>
-    <UHeader>
-      <template #left>
-        <NuxtLink
-          to="/"
-          class="font-semibold text-highlighted"
-        >
-          RHG Intranet
-        </NuxtLink>
-      </template>
-
-      <template #right>
-        <UColorModeButton />
-      </template>
-    </UHeader>
-
-    <UMain>
+    <NuxtLayout>
       <NuxtPage />
-    </UMain>
-
-    <UFooter>
-      <template #left>
-        <p class="text-sm text-muted">
-          RHG Intranet &copy; {{ new Date().getFullYear() }}
-        </p>
-      </template>
-    </UFooter>
+    </NuxtLayout>
   </UApp>
 </template>

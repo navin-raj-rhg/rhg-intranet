@@ -92,6 +92,65 @@ foreign keys, and the composite `(tool_id, role_key)` constraint on
 `user_tool_roles` were confirmed to apply and query correctly, and
 `/api/tools` was confirmed to return real data through the full stack.
 
+## Step 4: authentication
+
+Auth uses Supabase Auth (email/password for now — Microsoft 365 SSO gets
+added before company-wide rollout, once this has been approved as a proper
+project). How it fits together:
+
+- **Client side**: `app/plugins/supabase.client.ts` creates a Supabase
+  browser client, used only for sign in / sign up / sign out. All actual
+  *data* still goes through our own Nitro API + Drizzle, never through
+  `supabase-js` directly.
+- **`app/stores/auth.ts`** (Pinia) holds the current session, user, and
+  profile, and exposes `signIn`, `signUp`, `signOut`.
+- **`app/composables/useApiFetch.ts`** — use this (not plain `$fetch`) for
+  any call to our own `/api/...` routes that needs to know who's calling.
+  It attaches the Supabase access token as a Bearer header automatically.
+- **`server/middleware/auth.ts`** validates that Bearer token on every
+  `/api/*` request and attaches the verified user to `event.context.user`.
+- **`server/utils/requireUser.ts`** — `requireUser()`, `requireProfile()`,
+  and `requireOwner()` are the building blocks every protected API route
+  uses to enforce auth (and, once we build tools, per-tool roles).
+
+### One-time setup after applying this step
+
+1. Apply the SQL trigger that auto-creates a `profiles` row whenever
+   someone signs up. This is a manual step (not a Drizzle migration)
+   because it touches Supabase's own `auth` schema: open
+   **Supabase Dashboard → SQL Editor → New query**, paste in the contents
+   of `server/db/manual-sql/001_handle_new_user.sql`, and run it once.
+
+2. Run `pnpm dev`, go to `/login`, and sign up with your own email. Check
+   your email for the confirmation link (Supabase's default email
+   templates handle this) and confirm the account.
+
+3. Sign in. The dashboard will show a **"Claim owner access"** button as
+   long as no owner has been set yet — click it. This calls
+   `/api/auth/claim-owner`, which only succeeds once, for the first person
+   to click it. That's you; you now have `is_owner = true` and, once we
+   build permission checks into each tool, this bypasses all of them.
+
+### Known limitation (fine for a demo, revisit before company-wide rollout)
+
+Route protection (`app/middleware/auth.global.ts`) only runs client-side —
+the session lives in the browser, not in a cookie Nuxt's server render can
+see. In practice this means: **actual data is safe** (every `/api/*` route
+is protected server-side, verified above), but the empty page shell for a
+protected page briefly renders on the very first server response before the
+client redirects an unauthenticated visitor to `/login`. For an internal
+demo this is a non-issue. Before a real company-wide launch, switch to
+`@supabase/ssr` for proper cookie-based sessions so protected pages never
+render server-side for a logged-out visitor either.
+
+**Verified:** typecheck and lint pass clean; the dev server was booted
+against a real local Postgres and confirmed: `/api/auth/owner-status`
+correctly reports no owner yet, `/api/auth/me` correctly rejects
+unauthenticated requests with 401, and both `/login` and `/` render the
+expected content server-side. Signing up/in against a *real* Supabase
+project couldn't be tested from this sandbox (no network access to
+supabase.co here) — that part needs to be confirmed on your end.
+
 ## Notes
 
 - `.env` is gitignored — never commit real credentials. `.env.example`

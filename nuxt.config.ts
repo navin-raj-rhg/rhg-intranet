@@ -12,21 +12,6 @@ export default defineNuxtConfig({
 
   css: ['~/assets/css/main.css'],
 
-  routeRules: {
-    '/': { prerender: false }
-  },
-
-  compatibilityDate: '2026-06-30',
-
-  eslint: {
-    config: {
-      stylistic: {
-        commaDangle: 'never',
-        braceStyle: '1tbs'
-      }
-    }
-  },
-
   // Server-only and client-exposed runtime config.
   // Populate the actual values in a local .env file - see .env.example.
   runtimeConfig: {
@@ -43,6 +28,21 @@ export default defineNuxtConfig({
     public: {
       supabaseUrl: '',
       supabaseAnonKey: ''
+    }
+  },
+
+  routeRules: {
+    '/': { prerender: false }
+  },
+
+  compatibilityDate: '2026-06-30',
+
+  eslint: {
+    config: {
+      stylistic: {
+        commaDangle: 'never',
+        braceStyle: '1tbs'
+      }
     }
   }
 })
