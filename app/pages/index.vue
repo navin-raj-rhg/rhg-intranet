@@ -3,7 +3,7 @@ const authStore = useAuthStore()
 const toast = useToast()
 
 const { data: ownerStatus, refresh: refreshOwnerStatus } = await useFetch('/api/auth/owner-status')
-const { data: tools } = await useTools()
+const tools = await useTools()
 const claimingOwner = ref(false)
 
 async function claimOwner() {
