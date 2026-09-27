@@ -77,3 +77,18 @@ export function getDownloadUrl(key: string, expiresInSeconds = 300) {
   })
   return getSignedUrl(useR2(), command, { expiresIn: expiresInSeconds })
 }
+
+/**
+ * Uploads a buffer straight from the server - used for files we generate
+ * ourselves (like the payout report PDF), as opposed to receipts, which
+ * come from the browser via a presigned PUT (see getUploadUrl above).
+ */
+export async function putObject(key: string, body: Buffer, contentType: string) {
+  const command = new PutObjectCommand({
+    Bucket: r2Bucket(),
+    Key: key,
+    Body: body,
+    ContentType: contentType
+  })
+  await useR2().send(command)
+}
