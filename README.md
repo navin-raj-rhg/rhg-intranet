@@ -207,3 +207,97 @@ has no place in the real app.
   documents every variable the project will eventually need.
 - Migrations always run against the direct connection (port 5432);
   the running app always uses the pooled connection (port 6543).
+
+## Step 7: Expense Claims (first full tool)
+
+The first real tool, and the template every future tool copies. It covers
+the full lifecycle: an employee submits a claim with a receipt, a manager
+approves it, and periodically a manager runs a payroll report that bundles
+every approved claim into a PDF and marks them paid.
+
+### Roles and workflow
+
+- **Roles** (tool: `expense-claims`): `employee` and `manager`. As with every
+  tool, `profiles.is_owner` bypasses these checks entirely.
+- **Status flow:** `submitted` → `approved` → `paid`. There is no "rejected"
+  status by design - a manager who has an issue with a claim raises it with
+  the employee directly, who then edits or deletes the claim themselves
+  (only possible while it's still `submitted`).
+- **Categories** are a fixed Postgres enum, not free text: Travel – National,
+  Travel – International, Parking, Staff Wellness Day, Office Refreshments
+  and Amenities, Medical Claim, Entertainment.
+
+### How it fits together
+
+- **`server/db/schema/expenseClaims.ts`** - the `expense_claims` table plus
+  `expense_payout_batches`, which logs every payroll report run (who ran it,
+  when, how many claims, total amount, and the generated PDF's R2 key) so
+  batches can be re-downloaded later.
+- **`server/utils/requireToolRole.ts`** - the reusable per-tool permission
+  gate every route below uses, and the pattern every future tool's routes
+  should follow: owner bypasses, everyone else needs a matching
+  `user_tool_roles` row.
+- **`server/api/tools/expense-claims/claims/*`** - submit, list (scoped by
+  role: employees see only their own, managers/owner see everyone's),
+  get-one (with a permission-checked receipt download URL), edit and delete
+  (employee, own claim, only while `submitted`), and approve (manager only).
+- **`server/api/tools/expense-claims/reports/*`** - `POST` pulls every
+  `approved` claim, builds the PDF, uploads it to R2, logs a batch row, and
+  marks those claims `paid`. `GET` lists past batches; `GET /:id` re-issues a
+  fresh download URL for an older batch's PDF (the original one expires
+  after 5 minutes, same as every other R2 presigned URL in this app).
+- **`server/utils/generateExpenseReportPdf.ts`** - builds the report with
+  `pdfkit`: one section per employee (Date / Category / Description /
+  Amount table, then a subtotal), titled by the month the report is *run*
+  in, with a grand total at the end.
+- **`app/pages/tools/expense-claims/index.vue`** - fetches the caller's role
+  via `my-role.get.ts` and renders either `EmployeeView.vue` (submit form +
+  own claims, inline edit/delete) or `ManagerView.vue` (approval queue,
+  approved-and-ready-for-payout list, "Run payroll report" button, report
+  history) from `app/components/expense-claims/`.
+
+### One-time setup after applying this step
+
+1. Add the new dependency: `pnpm add pdfkit` and `pnpm add -D @types/pdfkit`.
+2. Run the schema migration: `pnpm db:generate && pnpm db:migrate`.
+3. Register the tool: open **Supabase Dashboard → SQL Editor**, paste in the
+   contents of `server/db/manual-sql/002_seed_expense_claims_tool.sql`, and
+   run it once. This creates the `tool_registry` row and the `employee` /
+   `manager` role definitions in `tool_roles` - it does **not** assign any
+   actual person a role yet.
+4. Assign roles manually until an admin screen exists (see known limitation
+   below), e.g.:
+   ```sql
+   insert into public.user_tool_roles (user_id, tool_id, role_key)
+   select id, 'expense-claims', 'employee'
+   from public.profiles
+   where email = 'someone@example.com';
+   ```
+
+### Known limitations (fine for the demo, worth revisiting)
+
+- **No admin screen for assigning tool roles yet.** Every assignment above
+  is a manual SQL/Studio insert. Planned as a shared, owner-only screen
+  (not specific to expense-claims) once this tool is validated end-to-end.
+- **Deleting a claim doesn't delete its R2 receipt object** - it becomes an
+  orphaned file. Harmless (private bucket, unguessable key), but a cleanup
+  job could be added later if storage cost or hygiene ever matters.
+- **The PDF table doesn't measure per-cell wrapped-text height** - a very
+  long description can visually crowd the row below it. Fine for normal
+  short descriptions.
+- **Report title uses the month the report is *run* in**, not the months
+  the underlying expenses were incurred in. A claim submitted late in one
+  month and approved/paid the next will appear under the later month.
+- A couple of Nuxt UI 4 component usages (`USelect` items shape, `UTextarea`
+  existing) were written from the patterns already in this codebase rather
+  than verified against the exact installed version's docs - confirmed
+  working by manual testing, but worth a second look if either component
+  ever needs to change.
+
+**Verified:** this step's schema, API routes, and pages were built and
+reviewed in a separate assistant session (no shared sandbox with your real
+Supabase/R2 credentials, unlike Steps 1-5's local-Postgres testing), then
+manually tested end-to-end by you against the real app: submitting,
+editing, and deleting a claim as an employee; approving a claim and running
+a full payroll report (including the generated PDF) as a manager;
+`pnpm typecheck` and `pnpm lint` both pass clean on the final code.
