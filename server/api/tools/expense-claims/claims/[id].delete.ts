@@ -1,0 +1,34 @@
+import { z } from 'zod'
+import { eq } from 'drizzle-orm'
+import { useDb } from '~~/server/db/client'
+import { expenseClaims } from '~~/server/db/schema'
+import { requireToolRole } from '~~/server/utils/requireToolRole'
+
+const paramsSchema = z.object({ id: z.coerce.number().int().positive() })
+
+// Note: this deletes the DB row only, not the underlying R2 receipt object -
+// orphaned receipts are harmless (private bucket, unguessable key) and a
+// cleanup job can be added later if it ever matters.
+export default defineEventHandler(async (event) => {
+  const { profile } = await requireToolRole(event, 'expense-claims', ['employee'])
+  const { id } = await getValidatedRouterParams(event, paramsSchema.parse)
+
+  const db = useDb()
+  const existing = await db.query.expenseClaims.findFirst({
+    where: (c, { eq }) => eq(c.id, id)
+  })
+
+  if (!existing) {
+    throw createError({ statusCode: 404, statusMessage: 'Claim not found' })
+  }
+  if (existing.employeeId !== profile.id) {
+    throw createError({ statusCode: 403, statusMessage: 'Not your claim' })
+  }
+  if (existing.status !== 'submitted') {
+    throw createError({ statusCode: 409, statusMessage: 'Only submitted claims can be deleted' })
+  }
+
+  await db.delete(expenseClaims).where(eq(expenseClaims.id, id))
+
+  return { success: true }
+})
