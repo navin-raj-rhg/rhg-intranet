@@ -5,7 +5,7 @@ export default defineNuxtConfig({
     '@nuxt/ui',
     '@pinia/nuxt'
   ],
-
+  ssr: false,
   devtools: {
     enabled: true
   },
@@ -31,9 +31,9 @@ export default defineNuxtConfig({
     }
   },
 
-  routeRules: {
-    '/': { prerender: false }
-  },
+  // routeRules: {
+  //   '/': { prerender: false }
+  // },
 
   compatibilityDate: '2026-06-30',
 
