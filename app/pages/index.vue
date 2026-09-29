@@ -6,6 +6,33 @@ const { data: ownerStatus, refresh: refreshOwnerStatus } = await useFetch('/api/
 const tools = await useTools()
 const claimingOwner = ref(false)
 
+// Owner-only: people who signed up but have no role in any tool yet.
+interface PendingUser {
+  id: string
+  email: string
+  fullName: string | null
+  createdAt: string
+}
+
+const isOwner = computed(() => !!authStore.profile?.isOwner)
+
+const { data: pendingUsers, refresh: refreshPending } = await useAsyncData('pending-users', () =>
+  isOwner.value
+    ? useApiFetch<PendingUser[]>('/api/admin/pending-users').catch(() => [] as PendingUser[])
+    : Promise.resolve([] as PendingUser[])
+)
+
+// Covers claiming owner on this very page: once you become owner, load the list.
+watch(isOwner, (value) => {
+  if (value) refreshPending()
+})
+
+const pendingSummary = computed(() => {
+  const names = (pendingUsers.value ?? []).map(u => u.fullName || u.email)
+  const shown = names.slice(0, 3).join(', ')
+  return names.length > 3 ? `${shown} and ${names.length - 3} more` : shown
+})
+
 async function claimOwner() {
   claimingOwner.value = true
   try {
@@ -47,6 +74,27 @@ async function claimOwner() {
           @click="claimOwner"
         >
           Claim owner access
+        </UButton>
+      </template>
+    </UAlert>
+
+    <UAlert
+      v-if="pendingUsers?.length"
+      class="mt-6"
+      color="warning"
+      variant="subtle"
+      icon="i-lucide-user-plus"
+      :title="pendingUsers.length === 1 ? '1 new sign-up is waiting for access' : `${pendingUsers.length} new sign-ups are waiting for access`"
+      :description="`${pendingSummary} can log in but can't see any tools until you assign a role.`"
+    >
+      <template #actions>
+        <UButton
+          v-for="tool in tools ?? []"
+          :key="tool.id"
+          size="sm"
+          :to="`${tool.route}/access`"
+        >
+          Assign access in {{ tool.name }}
         </UButton>
       </template>
     </UAlert>
