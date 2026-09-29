@@ -263,7 +263,7 @@ every approved claim into a PDF and marks them paid.
   should follow: owner bypasses, everyone else needs a matching
   `user_tool_roles` row.
 - **`server/api/tools/expense-claims/claims/*`** - submit, list (scoped by
-  role: employees see only their own, managers/owner see everyone's),
+  role - *superseded in Step 9: managers now see only their own team*),
   get-one (with a permission-checked receipt download URL), edit and delete
   (employee, own claim, only while `submitted`), and approve (manager only).
 - **`server/api/tools/expense-claims/reports/*`** - `POST` pulls every
@@ -301,9 +301,8 @@ every approved claim into a PDF and marks them paid.
 
 ### Known limitations (fine for the demo, worth revisiting)
 
-- **No admin screen for assigning tool roles yet.** Every assignment above
-  is a manual SQL/Studio insert. Planned as a shared, owner-only screen
-  (not specific to expense-claims) once this tool is validated end-to-end.
+- ~~**No admin screen for assigning tool roles yet.**~~ *Resolved in Step 9 -
+  roles are now assigned from each tool's Manage access screen.*
 - **Deleting a claim doesn't delete its R2 receipt object** - it becomes an
   orphaned file. Harmless (private bucket, unguessable key), but a cleanup
   job could be added later if storage cost or hygiene ever matters.
@@ -396,7 +395,7 @@ even a brief flash of protected content structure.
 
 - Client-side-only session/route protection (data itself is always
   protected server-side - see Step 4)
-- No role-assignment admin UI - manual SQL only (see Step 7)
+- ~~No role-assignment admin UI~~ - resolved in Step 9 (see below)
 - Deleting an expense claim doesn't clean up its R2 receipt (see Step 7)
 - No Microsoft SSO yet - planned before company-wide rollout
 
@@ -406,3 +405,107 @@ Railway URL - login, dashboard tool listing, Expense Claims (employee
 submit-with-receipt and manager approve/report/payout flows), and receipt/
 report file upload and download via R2. `pnpm typecheck` and `pnpm lint`
 both pass clean on the final code including the `ssr: false` change.
+
+## Step 9: Role-assignment admin, multi-role users and manager teams
+
+Replaces the manual-SQL role assignment from Step 7 with an owner-only
+"Manage access" screen inside each tool, and adds the rule that work is
+approved only by the manager(s) an employee is linked to.
+
+### What changed
+
+- **A user can hold several roles in one tool** (e.g. `employee` + `manager`).
+  `user_tool_roles` is now unique on `(user_id, tool_id, role_key)`.
+- **Employee -> manager links.** New table `tool_manager_links`
+  (`tool_id, employee_id, manager_id`). An employee can have **one or more**
+  managers; **any one** of them can approve. A manager sees only claims from
+  employees linked to them; the owner still sees everyone.
+- **New sign-ups have no roles**, so they see no tools. The owner's dashboard
+  shows an in-app banner listing them, with an "Assign access in <tool>"
+  button per tool. (No email notification yet.)
+
+### How it fits together
+
+- **`server/utils/requireToolRole.ts`** - now loads *all* of a user's roles for
+  the tool. Returns `roles: string[]` (use this, e.g. `roles.includes('manager')`)
+  plus a legacy single `role` that is **not reliable for multi-role users**.
+  The owner bypass returns `roles: ['owner']`.
+- **`server/utils/toolTeams.ts`** - generic link helpers reusable by any tool:
+  `getManagedEmployeeIds`, `getManagerIdsOf`, `isManagerOf`, `getPeerManagerIds`
+  (a manager plus co-managers who share an employee).
+- **`server/utils/toolAccess.ts`** - `saveToolUserAccess()`, the single place
+  that saves a user's roles **and** managers in one transaction and enforces the
+  rules below. `toolUsesManagerLinks()` decides whether a tool uses links: it
+  does if it defines **both** an `employee` and a `manager` role.
+- **`server/api/admin/tools/[toolId]/`** (owner-only, generic for every tool):
+  `roles.get.ts`, `users.get.ts`, `users/[userId].put.ts`.
+  **`server/api/admin/pending-users.get.ts`** feeds the dashboard banner.
+- **`app/components/ToolAccessAdmin.vue`** - reusable UI: one row per user, a
+  checkbox per role, a manager multi-select for employees, a Save button per
+  row. Used by **`app/pages/tools/expense-claims/access.vue`**, reached from a
+  "Manage access" button on the tool page (owner only).
+- **Expense Claims scoping:** `GET /claims` takes `?scope=mine` (default) or
+  `?scope=team`; approve requires the claim's employee to be linked to the
+  caller (and is guarded against two managers approving at once); submitting
+  requires at least one linked manager (owner exempt); a payroll report
+  covers approved claims from the runner's team only (owner: everyone); report
+  history/download is limited to reports run by the caller or a co-manager.
+  The tool page shows tabs ("Approvals & payroll" / "My claims") for users who
+  hold both roles.
+
+### Rules the server enforces on every save
+
+- Every role must be defined for that tool; an employee needs >= 1 manager;
+  nobody is their own manager; every chosen manager must already be *saved*
+  as a Manager in that tool.
+- A Manager role (or link) can't be removed while an employee would be left
+  with no manager - the error names the employees to reassign first.
+- Removing all roles removes the user's links too.
+
+### One-time setup after applying this step
+
+1. Schema: `pnpm db:generate && pnpm db:migrate` (creates `tool_manager_links`,
+   changes the `user_tool_roles` unique constraint). Run locally - Railway does
+   not apply migrations.
+2. Supabase SQL Editor: run `server/db/manual-sql/003_cleanup_deleted_users.sql`
+   once. It adds a trigger that deletes a profile when its auth user is deleted,
+   and cleans up any already-orphaned profiles.
+3. Existing employees need a manager link before they can submit claims: use
+   Manage access (or insert into `tool_manager_links`).
+4. Optional cleanup: delete the unused `user` role row for expense-claims from
+   `tool_roles` (only `employee` and `manager` are used).
+
+### Adding a future tool that uses employee/manager teams
+
+Define `employee` and `manager` roles for it in `tool_roles`, add
+`app/pages/tools/<tool-id>/access.vue` that renders
+`<ToolAccessAdmin tool-id="<tool-id>" />` (the dashboard banner links to
+`<tool route>/access`), and in the tool's routes use `requireToolRole`'s
+`roles` plus the `toolTeams` helpers rather than the legacy `role`.
+
+### Known limitations (fine for the demo)
+
+- **Anyone can still sign up**; they see nothing until the owner assigns a
+  role. Restricting sign-up to company email addresses is planned.
+- **The new-sign-up alert is in-app only** (no email/push).
+- **Deleting an auth user who has claim or payroll history** removes their
+  login but keeps their profile row (so payroll history is never lost). They
+  still appear in Manage access. A proper "deactivate user" feature would fix this.
+- **The manager link is live, not a snapshot:** re-linking an employee moves
+  their pending claims to the new manager.
+- **Co-managers see each other's payroll reports**, including reports covering
+  employees they don't share.
+- **Older components show raw API errors** (e.g. `[POST] "/api/...": 409 ...`);
+  the new admin screen shows the clean server message. A shared helper could
+  unify this.
+
+**Verified:** `pnpm typecheck` and `pnpm lint` clean. The save rules
+(`saveToolUserAccess`) and the deleted-user trigger were tested against a local
+Postgres built from the real migrations (21 rule checks plus trigger tests).
+You then tested end-to-end with two separate teams: each manager sees only
+their own team's claims, cross-team reads and approvals return 403, employees
+and managers get 403 on owner-only APIs, per-team payroll PDFs contain only
+that team's claims, other teams' reports return 404, an employee with two
+managers can be approved by either, a stale second approval is refused, and
+removing a manager who others depend on is blocked.
+
