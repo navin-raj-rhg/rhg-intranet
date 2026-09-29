@@ -208,6 +208,31 @@ has no place in the real app.
 - Migrations always run against the direct connection (port 5432);
   the running app always uses the pooled connection (port 6543).
 
+## Step 6: Tool registry + dashboard shell
+
+Before any real tool existed, this step built the mechanism every tool
+plugs into, and the dashboard page that lists them.
+
+- **`tool_registry`** (added in Step 3) is the single source of truth for
+  which tools exist. Nothing about tools is hardcoded in the frontend -
+  adding a tool later means adding a row here (plus its own schema, API
+  routes, and pages), not editing a shared list somewhere.
+- **`app/composables/useTools.ts`** - fetches the tools the current user can
+  see (owner sees everything; everyone else sees only tools where they have
+  a `user_tool_roles` row) and exposes them to any page that needs the list.
+- **`server/api/tools/index.get.ts`** - the API route behind that composable.
+  Auth-protected like every other `/api/*` route, via the same middleware
+  from Step 4.
+- **Dashboard (`app/pages/index.vue`)** - now renders the tools this user
+  can see as launcher cards, instead of the Step 2 placeholder. A user with
+  no tool roles yet (and no `is_owner`) sees an empty dashboard rather than
+  an error - this is expected until roles are assigned.
+
+**Verified:** typecheck and lint pass clean; manually confirmed that the
+owner account sees every registered tool and a second test account with no
+`user_tool_roles` rows sees an empty dashboard, before any tool actually
+existed to click into.
+
 ## Step 7: Expense Claims (first full tool)
 
 The first real tool, and the template every future tool copies. It covers
@@ -301,3 +326,83 @@ manually tested end-to-end by you against the real app: submitting,
 editing, and deleting a claim as an employee; approving a claim and running
 a full payroll report (including the generated PDF) as a manager;
 `pnpm typecheck` and `pnpm lint` both pass clean on the final code.
+
+## Step 8: Deployment (Railway)
+
+The app is deployed as a live demo at:
+
+**https://rhg-intranet-production.up.railway.app**
+
+### Platform
+
+Hosted on **Railway**, connected directly to this GitHub repo. Railway runs
+Nuxt's default Node server (`nuxt build` then its built-in start command) -
+no custom server code or Dockerfile was needed. Auto-deploy is on: every
+push to `main` triggers a new build and release, and a failed build leaves
+the previous working deployment running rather than taking the site down.
+
+**Database migrations are not part of the deploy.** A push only ships app
+code. Any new Drizzle migration still has to be run manually from a local
+machine with `pnpm db:migrate` (direct connection), same as every earlier
+step - easy to forget, worth double-checking after schema changes.
+
+### Environment variables
+
+8 of the 9 variables in `.env.example` are set on Railway (Variables tab,
+pasted via the Raw Editor):
+
+- `NUXT_PUBLIC_SUPABASE_URL`, `NUXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NUXT_SUPABASE_SERVICE_ROLE_KEY`
+- `NUXT_SUPABASE_DB_POOL_URL` (pooled, port 6543 - what the running app uses)
+- `NUXT_R2_ACCOUNT_ID`, `NUXT_R2_ACCESS_KEY_ID`, `NUXT_R2_SECRET_ACCESS_KEY`,
+  `NUXT_R2_BUCKET`
+
+**`NUXT_SUPABASE_DB_URL`** (the direct, non-pooled connection) is deliberately
+**not** set on Railway - it's only used by `drizzle-kit` for migrations,
+which are run locally, so leaving it off the server reduces what's exposed
+there. The commented-out Microsoft SSO variables in `.env.example` are also
+not yet needed.
+
+### Supporting service configuration
+
+Two other services needed to be told about the new domain:
+
+- **Supabase → Authentication → URL Configuration**: Site URL and Redirect
+  URLs updated to include the Railway domain (alongside the existing
+  `localhost:3000` entries, which still work for local dev).
+- **Cloudflare R2 → bucket → CORS policy**: the Railway origin was added
+  alongside `localhost:3000`, since receipt/report uploads go straight from
+  the browser to R2 and are blocked by CORS otherwise. Downloads use
+  presigned GET URLs and don't need CORS.
+
+### Fix required: SSR and client-only sessions
+
+The first deploy showed protected pages (starting from `/`) throwing a
+`401 Not authenticated` error on a fresh, logged-out visit, instead of
+cleanly showing `/login`. Cause: the session lives only in the browser
+(see the Step 4 known limitation above), but Nuxt was still
+server-rendering pages on first load, including pages that fetch data
+needing that session - so the server tried to call `/api/tools` with no
+token, got a 401, and baked that into the rendered page before the client
+redirect to `/login` could run.
+
+**Fix:** set `ssr: false` in `nuxt.config.ts`. The app renders entirely
+client-side; `/api/*` routes are unaffected since Nitro still serves them
+regardless of SSR mode. This also improves on the Step 4 known limitation
+in passing - a logged-out visitor now gets a near-empty shell instead of
+even a brief flash of protected content structure.
+
+### Known limitations carried into this deployment (unchanged, still fine for a demo)
+
+- Client-side-only session/route protection (data itself is always
+  protected server-side - see Step 4)
+- No role-assignment admin UI - manual SQL only (see Step 7)
+- Deleting an expense claim doesn't clean up its R2 receipt (see Step 7)
+- No Microsoft SSO yet - planned before company-wide rollout
+
+**Verified:** build succeeds on Railway; both an owner account and a second
+non-owner test account were manually tested end-to-end against the live
+Railway URL - login, dashboard tool listing, Expense Claims (employee
+submit-with-receipt and manager approve/report/payout flows), and receipt/
+report file upload and download via R2. `pnpm typecheck` and `pnpm lint`
+both pass clean on the final code including the `ssr: false` change.
