@@ -33,6 +33,7 @@ const form = reactive({
   description: ''
 })
 const receiptFile = ref<File | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
 const submitting = ref(false)
 
 function onFileChange(e: Event) {
@@ -46,6 +47,7 @@ function resetForm() {
   form.expenseDate = ''
   form.description = ''
   receiptFile.value = null
+  if (fileInputRef.value) fileInputRef.value.value = ''
 }
 
 async function submitClaim() {
@@ -89,6 +91,7 @@ const editForm = reactive({
   description: ''
 })
 const editReceiptFile = ref<File | null>(null)
+const editFileInputRef = ref<HTMLInputElement | null>(null)
 const savingEdit = ref(false)
 
 function startEdit(claim: ExpenseClaim) {
@@ -98,6 +101,7 @@ function startEdit(claim: ExpenseClaim) {
   editForm.expenseDate = claim.expenseDate
   editForm.description = claim.description
   editReceiptFile.value = null
+  if (editFileInputRef.value) editFileInputRef.value.value = ''
 }
 
 function cancelEdit() {
@@ -144,6 +148,7 @@ async function saveEdit(id: number) {
 const deletingId = ref<number | null>(null)
 
 async function deleteClaim(id: number) {
+  // eslint-disable-next-line no-alert
   if (!confirm('Delete this claim? This cannot be undone.')) return
   deletingId.value = id
   try {
@@ -215,10 +220,26 @@ async function viewReceipt(id: number) {
         </UFormField>
 
         <UFormField label="Receipt">
+          <div class="flex items-center gap-3">
+            <UButton
+              type="button"
+              variant="outline"
+              color="neutral"
+              size="sm"
+              icon="i-lucide-upload"
+              @click="fileInputRef?.click()"
+            >
+              Choose file
+            </UButton>
+            <span class="text-sm text-muted truncate">
+              {{ receiptFile?.name || 'No file selected' }}
+            </span>
+          </div>
           <input
+            ref="fileInputRef"
             type="file"
             accept="image/*,application/pdf"
-            class="text-sm"
+            class="hidden"
             @change="onFileChange"
           >
         </UFormField>
@@ -289,10 +310,26 @@ async function viewReceipt(id: number) {
               />
             </UFormField>
             <UFormField label="Replace receipt (optional)">
+              <div class="flex items-center gap-3">
+                <UButton
+                  type="button"
+                  variant="outline"
+                  color="neutral"
+                  size="sm"
+                  icon="i-lucide-upload"
+                  @click="editFileInputRef?.click()"
+                >
+                  Choose file
+                </UButton>
+                <span class="text-sm text-muted truncate">
+                  {{ editReceiptFile?.name || 'Keep existing receipt' }}
+                </span>
+              </div>
               <input
+                ref="editFileInputRef"
                 type="file"
                 accept="image/*,application/pdf"
-                class="text-sm"
+                class="hidden"
                 @change="onEditFileChange"
               >
             </UFormField>
