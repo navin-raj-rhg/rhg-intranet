@@ -25,10 +25,10 @@ interface PayoutBatch {
 const toast = useToast()
 
 const { data: pending, refresh: refreshPending } = await useAsyncData('expense-claims-submitted', () =>
-  useApiFetch<ExpenseClaim[]>('/api/tools/expense-claims/claims', { query: { status: 'submitted' } })
+  useApiFetch<ExpenseClaim[]>('/api/tools/expense-claims/claims', { query: { status: 'submitted', scope: 'team' } })
 )
 const { data: readyForPayout, refresh: refreshReady } = await useAsyncData('expense-claims-approved', () =>
-  useApiFetch<ExpenseClaim[]>('/api/tools/expense-claims/claims', { query: { status: 'approved' } })
+  useApiFetch<ExpenseClaim[]>('/api/tools/expense-claims/claims', { query: { status: 'approved', scope: 'team' } })
 )
 const { data: history, refresh: refreshHistory } = await useAsyncData('expense-claims-batches', () =>
   useApiFetch<PayoutBatch[]>('/api/tools/expense-claims/reports')

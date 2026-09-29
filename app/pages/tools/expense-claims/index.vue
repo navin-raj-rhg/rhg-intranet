@@ -1,17 +1,30 @@
 <script setup lang="ts">
 interface MyRoleResponse {
-  role: 'owner' | 'employee' | 'manager'
+  roles: string[]
+  // True for an employee who isn't linked to any manager yet.
+  missingManager: boolean
 }
 
 const { data: roleData, pending, error } = await useAsyncData('expense-claims-my-role', () =>
   useApiFetch<MyRoleResponse>('/api/tools/expense-claims/my-role')
 )
 
-// The owner bypass can land on either view - owner gets the manager view
-// since it has the full picture (approval queue + payroll report), and the
-// owner bypass already lets them submit claims too if they ever need to via
-// the API, even though that's not exposed in this view.
-const showManagerView = computed(() => roleData.value?.role === 'manager' || roleData.value?.role === 'owner')
+const roles = computed(() => roleData.value?.roles ?? [])
+
+// The owner sees the manager view (approval queue + payroll report for
+// everyone). A user holding both 'employee' and 'manager' gets both views,
+// switchable with tabs; a single-role user just gets their one view.
+const isEmployee = computed(() => roles.value.includes('employee'))
+const isManager = computed(() => roles.value.includes('manager') || roles.value.includes('owner'))
+
+const tab = ref<'employee' | 'manager'>(isManager.value ? 'manager' : 'employee')
+const tabItems = [
+  { label: 'Approvals & payroll', value: 'manager' },
+  { label: 'My claims', value: 'employee' }
+]
+
+const showManagerView = computed(() => isManager.value && (!isEmployee.value || tab.value === 'manager'))
+const showEmployeeView = computed(() => isEmployee.value && (!isManager.value || tab.value === 'employee'))
 </script>
 
 <template>
@@ -38,8 +51,25 @@ const showManagerView = computed(() => roleData.value?.role === 'manager' || rol
     </div>
 
     <template v-else>
+      <UAlert
+        v-if="roleData?.missingManager"
+        class="mt-6"
+        color="warning"
+        variant="subtle"
+        title="No approving manager assigned"
+        description="You can't submit claims until the workspace owner links you to a manager."
+      />
+
+      <UTabs
+        v-if="isEmployee && isManager"
+        v-model="tab"
+        class="mt-6"
+        :items="tabItems"
+        :content="false"
+      />
+
       <ExpenseClaimsManagerView v-if="showManagerView" />
-      <ExpenseClaimsEmployeeView v-else />
+      <ExpenseClaimsEmployeeView v-if="showEmployeeView" />
     </template>
   </UContainer>
 </template>

@@ -1,13 +1,25 @@
-import { asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import { useDb } from '~~/server/db/client'
 import { expenseClaims, expensePayoutBatches, profiles } from '~~/server/db/schema'
 import { requireToolRole } from '~~/server/utils/requireToolRole'
+import { getManagedEmployeeIds } from '~~/server/utils/toolTeams'
 import { buildObjectKey, putObject, getDownloadUrl } from '~~/server/utils/r2'
 import { generateExpenseReportPdf } from '~~/server/utils/generateExpenseReportPdf'
 
 export default defineEventHandler(async (event) => {
-  const { profile } = await requireToolRole(event, 'expense-claims', ['manager'])
+  const { profile, role } = await requireToolRole(event, 'expense-claims', ['manager'])
   const db = useDb()
+
+  // A manager's report covers approved claims from their own team only,
+  // whichever linked manager approved them. The owner's covers everyone.
+  const conditions = [eq(expenseClaims.status, 'approved')]
+  if (role !== 'owner') {
+    const employeeIds = await getManagedEmployeeIds('expense-claims', profile.id)
+    if (employeeIds.length === 0) {
+      throw createError({ statusCode: 400, statusMessage: 'No approved claims are waiting to be paid.' })
+    }
+    conditions.push(inArray(expenseClaims.employeeId, employeeIds))
+  }
 
   const rows = await db
     .select({
@@ -21,7 +33,7 @@ export default defineEventHandler(async (event) => {
     })
     .from(expenseClaims)
     .leftJoin(profiles, eq(profiles.id, expenseClaims.employeeId))
-    .where(eq(expenseClaims.status, 'approved'))
+    .where(and(...conditions))
     .orderBy(asc(profiles.fullName), asc(expenseClaims.expenseDate))
 
   if (rows.length === 0) {
@@ -64,7 +76,7 @@ export default defineEventHandler(async (event) => {
   await db
     .update(expenseClaims)
     .set({ status: 'paid', paidBatchId: batch.id, updatedAt: new Date() })
-    .where(inArray(expenseClaims.id, rows.map(r => r.id)))
+    .where(and(inArray(expenseClaims.id, rows.map(r => r.id)), eq(expenseClaims.status, 'approved')))
 
   const pdfUrl = await getDownloadUrl(pdfKey)
 

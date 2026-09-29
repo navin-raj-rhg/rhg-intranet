@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { useDb } from '~~/server/db/client'
 import { expenseCategory, expenseClaims } from '~~/server/db/schema'
 import { requireToolRole } from '~~/server/utils/requireToolRole'
+import { getManagerIdsOf } from '~~/server/utils/toolTeams'
 
 const bodySchema = z.object({
   category: z.enum(expenseCategory.enumValues),
@@ -14,7 +15,16 @@ const bodySchema = z.object({
 // Only 'employee' role (or the owner, testing) can submit claims. Managers
 // approve/pay - they don't submit through this tool.
 export default defineEventHandler(async (event) => {
-  const { profile } = await requireToolRole(event, 'expense-claims', ['employee'])
+  const { profile, role } = await requireToolRole(event, 'expense-claims', ['employee'])
+
+  // Every employee must be linked to at least one manager, otherwise nobody
+  // could ever approve the claim. (The owner is exempt - testing only.)
+  if (role !== 'owner' && (await getManagerIdsOf('expense-claims', profile.id)).length === 0) {
+    throw createError({
+      statusCode: 409,
+      statusMessage: 'You have no approving manager yet. Ask the workspace owner to link you to a manager.'
+    })
+  }
 
   const body = await readValidatedBody(event, bodySchema.parse)
   const db = useDb()

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { useDb } from '~~/server/db/client'
 import { requireToolRole } from '~~/server/utils/requireToolRole'
 import { getDownloadUrl } from '~~/server/utils/r2'
+import { isManagerOf } from '~~/server/utils/toolTeams'
 
 const paramsSchema = z.object({ id: z.coerce.number().int().positive() })
 
@@ -10,7 +11,7 @@ const paramsSchema = z.object({ id: z.coerce.number().int().positive() })
 // table should do instead of proxying through the generic route: look up
 // the record, check ownership/role, then call getDownloadUrl() directly.
 export default defineEventHandler(async (event) => {
-  const { profile, role } = await requireToolRole(event, 'expense-claims', ['employee', 'manager'])
+  const { profile, roles } = await requireToolRole(event, 'expense-claims', ['employee', 'manager'])
   const { id } = await getValidatedRouterParams(event, paramsSchema.parse)
 
   const db = useDb()
@@ -22,10 +23,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: 'Claim not found' })
   }
 
-  // Employees can only look at their own claims; managers/owner can look at
-  // any claim.
-  if (role === 'employee' && claim.employeeId !== profile.id) {
-    throw createError({ statusCode: 403, statusMessage: 'Not your claim' })
+  // You can view your own claims. A manager can view claims from employees
+  // linked to them; the owner can view anything. Nobody else can.
+  if (claim.employeeId !== profile.id && !roles.includes('owner')) {
+    const isTeamManager = roles.includes('manager')
+      && await isManagerOf('expense-claims', profile.id, claim.employeeId)
+    if (!isTeamManager) {
+      throw createError({ statusCode: 403, statusMessage: 'Not your claim' })
+    }
   }
 
   const receiptUrl = await getDownloadUrl(claim.receiptKey)
