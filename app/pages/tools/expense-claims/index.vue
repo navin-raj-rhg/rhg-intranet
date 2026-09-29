@@ -1,4 +1,6 @@
 <script setup lang="ts">
+const authStore = useAuthStore()
+
 interface MyRoleResponse {
   roles: string[]
   // True for an employee who isn't linked to any manager yet.
@@ -32,7 +34,19 @@ const showEmployeeView = computed(() => isEmployee.value && (!isManager.value ||
     <UPageHeader
       title="Expense Claims"
       description="Submit expense claims and, for managers, approve them and run payroll reports."
-    />
+    >
+      <template
+        v-if="authStore.profile?.isOwner"
+        #links
+      >
+        <UButton
+          to="/tools/expense-claims/access"
+          icon="i-lucide-users"
+          variant="outline"
+          label="Manage access"
+        />
+      </template>
+    </UPageHeader>
 
     <UAlert
       v-if="error"
