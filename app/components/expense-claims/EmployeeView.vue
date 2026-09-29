@@ -148,7 +148,6 @@ async function saveEdit(id: number) {
 const deletingId = ref<number | null>(null)
 
 async function deleteClaim(id: number) {
-  // eslint-disable-next-line no-alert
   if (!confirm('Delete this claim? This cannot be undone.')) return
   deletingId.value = id
   try {

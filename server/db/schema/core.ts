@@ -6,8 +6,10 @@ import {
   timestamp,
   integer,
   foreignKey,
-  unique
+  unique,
+  check
 } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 
 /**
  * Mirrors Supabase Auth's `auth.users` table, one row per user, keyed by
@@ -64,11 +66,11 @@ export const toolRoles = pgTable(
 )
 
 /**
- * Who has which role in which tool. A user can hold different roles across
- * different tools (e.g. 'employee' in expense-claims, 'approver' in
- * inspections). Presence of any row for a (user, tool) pair is what makes
- * that tool visible to them on the launcher - independent of `is_owner`,
- * which bypasses this table entirely.
+ * Who has which role in which tool. A user can hold several roles in the
+ * same tool (e.g. 'employee' + 'manager' in a leave tool), one row per role,
+ * and different roles across different tools. Presence of any row for a
+ * (user, tool) pair is what makes that tool visible to them on the launcher
+ * - independent of `is_owner`, which bypasses this table entirely.
  */
 export const userToolRoles = pgTable(
   'user_tool_roles',
@@ -84,9 +86,12 @@ export const userToolRoles = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
   },
   table => [
-    // One role per user per tool - assign a different role to change it,
-    // rather than holding two simultaneous roles in the same tool.
-    unique('user_tool_roles_user_id_tool_id_unique').on(table.userId, table.toolId),
+    // A user can hold several roles in a tool, but never the same role twice.
+    unique('user_tool_roles_user_id_tool_id_role_key_unique').on(
+      table.userId,
+      table.toolId,
+      table.roleKey
+    ),
     // Composite FK: the (toolId, roleKey) pair must exist in tool_roles,
     // so you can't assign someone a role a tool never defined.
     foreignKey({
@@ -94,5 +99,41 @@ export const userToolRoles = pgTable(
       foreignColumns: [toolRoles.toolId, toolRoles.roleKey],
       name: 'user_tool_roles_tool_role_fk'
     })
+  ]
+)
+
+/**
+ * Links an employee to the manager(s) who approve their work, per tool.
+ * An employee can be linked to several managers - any ONE of them can
+ * approve. A manager only sees work from employees linked to them.
+ *
+ * Rules the DB enforces: no duplicate links, and nobody manages themselves.
+ * Rules enforced at the API layer (not expressible as a simple constraint):
+ * the employee must hold the 'employee' role and the manager the 'manager'
+ * role in that tool; every employee keeps at least one manager; a manager
+ * can't lose the role or link while employees still depend on them.
+ */
+export const toolManagerLinks = pgTable(
+  'tool_manager_links',
+  {
+    id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+    toolId: text('tool_id')
+      .notNull()
+      .references(() => toolRegistry.id, { onDelete: 'cascade' }),
+    employeeId: uuid('employee_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    managerId: uuid('manager_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+  },
+  table => [
+    unique('tool_manager_links_tool_employee_manager_unique').on(
+      table.toolId,
+      table.employeeId,
+      table.managerId
+    ),
+    check('tool_manager_links_no_self_manage', sql`${table.employeeId} <> ${table.managerId}`)
   ]
 )
