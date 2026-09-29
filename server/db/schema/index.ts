@@ -2,6 +2,7 @@
 // can both import a single entry point.
 export * from './core'
 export * from './expenseClaims'
+export * from './leave'
 
 // Further tool-specific tables get added here as each tool is built, e.g:
 // export * from './inspections'

@@ -7,7 +7,8 @@ import {
   integer,
   foreignKey,
   unique,
-  check
+  check,
+  date
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
@@ -24,6 +25,11 @@ export const profiles = pgTable('profiles', {
   // Global bypass - sees and manages every tool, regardless of tool_roles.
   // This is intentionally separate from the per-tool role system.
   isOwner: boolean('is_owner').notNull().default(false),
+  // Set by the owner (Step 10). Join date drives leave entitlement tiers and
+  // the Anniversary leave month; date of birth drives Birthday leave. Both
+  // nullable - existing users have neither until the owner fills them in.
+  joinDate: date('join_date'),
+  dateOfBirth: date('date_of_birth'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 })
