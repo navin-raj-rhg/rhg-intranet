@@ -6,7 +6,8 @@ launcher for internal tools. Built so far: Expense Claims (Step 7), Leave
 Applications (Step 10) and Cost Modelling (Step 11). The sections below are written step by step; the
 "What's here so far" list and the Step 2 to 5 wording describe the state at
 that step, so later step sections win where they differ. The project status
-document (kept in the Claude project) has the current overview and roadmap.
+document, `docs/project-status.md`, has the current overview, decisions and
+roadmap; `CLAUDE.md` has the working rules for Claude Code sessions.
 
 Useful commands: `pnpm dev`, `pnpm lint`, `pnpm typecheck`, `pnpm test`
 (unit tests, no database needed), `pnpm db:generate`, `pnpm db:migrate`.
