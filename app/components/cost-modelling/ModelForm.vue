@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CostFactorsResponse, CostModelDetail, SaveCostModelBody } from '~~/shared/types/costModelling'
+import type { CostFactorsResponse, CostModelDetail, CostProductSuggestion, SaveCostModelBody } from '~~/shared/types/costModelling'
 import type { CostCategory } from '~~/shared/utils/costCategories'
 import type { ContainerSize, CostRowResult, PackLevelKey } from '~~/shared/utils/costModel'
 import type { CostFormRow, FormPackLevel } from '~~/shared/utils/costModelForm'
@@ -44,8 +44,22 @@ function addRow() {
 }
 function copyRow(i: number) {
   const copy = structuredClone(toRaw(rows.value[i]!))
-  rows.value.splice(i + 1, 0, { ...copy, key: nextKey++, productNo: '' })
+  rows.value.splice(i + 1, 0, { ...copy, key: nextKey++, productNo: '', filledFrom: undefined })
 }
+/** Product look-up (Step 11.8d): fill only this row's empty cells from the last saved version. */
+function fillFromProduct(i: number, product: CostProductSuggestion) {
+  const row = rows.value[i]
+  if (!row) return
+  const { row: filledRow, filled } = fillEmptyCostFormCells(row, product.input, product.modelName)
+  rows.value[i] = filledRow
+  toast.add({
+    title: filled ? `Filled ${filled} empty cell${filled === 1 ? '' : 's'} from ${product.productNo}` : `Nothing to fill for ${product.productNo}`,
+    description: filled ? `From ${product.modelName}. Anything you'd already typed was kept.` : 'Every cell in this row already has a value.',
+    color: filled ? 'info' : 'neutral',
+    duration: 4000
+  })
+}
+
 function removeRow(i: number) {
   if (rows.value.length === 1) rows.value = [emptyCostFormRow(nextKey++)]
   else rows.value.splice(i, 1)
@@ -535,12 +549,10 @@ const inputUi = { base: 'px-1.5 text-right tabular-nums' }
             >
               <td :class="[td, 'sticky left-0 z-10 bg-default']">
                 <div class="flex items-center gap-1">
-                  <UInput
+                  <CostModellingProductNoInput
                     v-model="row.productNo"
-                    size="xs"
-                    class="w-24"
-                    maxlength="100"
-                    :aria-label="`Row ${i + 1} product no.`"
+                    :label="`Row ${i + 1} product no.`"
+                    @pick="fillFromProduct(i, $event)"
                   />
                   <UTooltip
                     v-if="results[i]?.issues.length"
@@ -550,6 +562,17 @@ const inputUi = { base: 'px-1.5 text-right tabular-nums' }
                       name="i-lucide-triangle-alert"
                       class="size-4 shrink-0 text-warning"
                       :aria-label="results[i]!.issues.join('. ')"
+                    />
+                  </UTooltip>
+                  <UTooltip
+                    v-if="row.filledFrom"
+                    :text="`Filled from: ${row.filledFrom}`"
+                  >
+                    <UIcon
+                      name="i-lucide-history"
+                      class="size-4 shrink-0 text-info"
+                      :aria-label="`Filled from: ${row.filledFrom}`"
+                      :data-testid="`filled-from-${i}`"
                     />
                   </UTooltip>
                 </div>

@@ -88,3 +88,45 @@ test('saved row round-trips back into the form (for Duplicate)', () => {
   assert.equal(back.toolingCost, '1000')
   assert.deepEqual(parseCostFormRow(back).input, input)
 })
+
+test('filling from a saved product only fills empty cells', async () => {
+  const { fillEmptyCostFormCells } = await import('../shared/utils/costModelForm.ts')
+  const saved = parseCostFormRow(filled({ outer: { l: '100', w: '60', h: '50', qty: '30' }, fobCurrency: 'CNY', fobPrice: '10' })).input
+
+  // Blank row with just the product no. typed: everything else comes across
+  const typed = { ...emptyCostFormRow(4), productNo: 'CL-100' }
+  const a = fillEmptyCostFormCells(typed, saved, 'Model A')
+  assert.equal(a.row.key, 4)
+  assert.equal(a.row.description, 'G-clamp')
+  assert.deepEqual(a.row.outer, { l: '100', w: '60', h: '50', qty: '30' })
+  assert.equal(a.row.fobCurrency, 'CNY')
+  assert.equal(a.row.fobPrice, '10')
+  assert.equal(a.row.rrpIncGst, '11')
+  assert.equal(a.row.filledFrom, 'Model A')
+  assert.equal(a.filled, 14) // description + 4 carton + 4 outer + 5 price fields
+  assert.equal(typed.description, '') // original row untouched
+
+  // Already-typed cells are kept; currency follows the typed FOB
+  const partly = { ...emptyCostFormRow(5), productNo: 'CL-100', fobPrice: '12', rrpIncGst: '15' }
+  const b = fillEmptyCostFormCells(partly, saved, 'Model A')
+  assert.equal(b.row.fobPrice, '12')
+  assert.equal(b.row.fobCurrency, 'USD')
+  assert.equal(b.row.rrpIncGst, '15')
+  assert.equal(b.row.buyerBuyPrice, '5')
+
+  // Nothing to fill -> no "filled from" note
+  const full = fillEmptyCostFormCells(a.row, saved, 'Model B')
+  assert.equal(full.filled, 0)
+  assert.equal(full.row.filledFrom, 'Model A')
+})
+
+test('filling works on a proxied row (the form\'s rows are Vue reactive proxies)', async () => {
+  const { fillEmptyCostFormCells } = await import('../shared/utils/costModelForm.ts')
+  const saved = parseCostFormRow(filled()).input
+  const raw = { ...emptyCostFormRow(1), productNo: 'CL-100' }
+  const proxied = new Proxy({ ...raw, carton: new Proxy(raw.carton, {}) }, {})
+  const { row, filled: n } = fillEmptyCostFormCells(proxied, saved, 'Model A')
+  assert.equal(row.description, 'G-clamp')
+  assert.equal(row.carton.l, '50')
+  assert.ok(n > 0)
+})

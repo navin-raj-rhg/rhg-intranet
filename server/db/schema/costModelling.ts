@@ -202,6 +202,8 @@ export const costModelRows = pgTable(
   },
   table => [
     index('cost_model_rows_model_idx').on(table.modelId),
+    // Product look-up by product no. (Step 11.8d), case-insensitive.
+    index('cost_model_rows_product_no_idx').on(sql`lower(${table.productNo})`),
     check('cost_model_rows_duty_range', sql`${table.dutyPercent} is null or (${table.dutyPercent} >= 0 and ${table.dutyPercent} <= 100)`)
   ]
 )

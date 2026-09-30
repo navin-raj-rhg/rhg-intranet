@@ -223,3 +223,15 @@ test('empty rows are ignored; a used row needs a product no. or description', as
   assert.deepEqual(costModelRowProblems([{ ...row, productNo: 'CL-100', description: null }, blank]), [])
   assert.deepEqual(costModelRowProblems([blank, { ...row, productNo: null, description: '' }]), ['Row 2: enter a product no. or description'])
 })
+
+test('same-day names get (2), (3)... and never reuse a deleted number', async () => {
+  const { nextCostModelName } = await import('../shared/utils/costModel.ts')
+  const base = 'Hardware - Clamps - Ningbo - 01/10/2026'
+  assert.equal(nextCostModelName(base, []), base)
+  assert.equal(nextCostModelName(base, [base]), `${base} (2)`)
+  assert.equal(nextCostModelName(base, [base, `${base} (2)`]), `${base} (3)`)
+  assert.equal(nextCostModelName(base, [`${base} (2)`]), `${base} (3)`) // original deleted
+  assert.equal(nextCostModelName(base, [`${base} (10)`, base]), `${base} (11)`)
+  // Names that merely start the same don't count
+  assert.equal(nextCostModelName(base, [`${base} (x)`, `${base}X`]), base)
+})

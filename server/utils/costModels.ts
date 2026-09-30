@@ -1,4 +1,4 @@
-import { and, count, desc, eq, exists, ilike, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, exists, ilike, like, or, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/pg-core'
 import type { useDb } from '~~/server/db/client'
 import {
@@ -15,6 +15,7 @@ import {
   calculateCostRow,
   costModelName,
   costModelRowProblems,
+  nextCostModelName,
   costRowHasContent,
   type PackLevelInput
 } from '~~/shared/utils/costModel'
@@ -25,6 +26,7 @@ import type {
   CostModelListItem,
   CostModelListResponse,
   CostModelRowInput,
+  CostProductSuggestion,
   SaveCostModelBody
 } from '~~/shared/types/costModelling'
 
@@ -86,7 +88,7 @@ export async function saveCostModel(db: Db, userId: string, body: SaveCostModelB
     if (!source) body.duplicatedFromId = null // original deleted meanwhile - still save the copy
   }
 
-  const name = costModelName({
+  const baseName = costModelName({
     category: category.name,
     subCategory: subCategoryName,
     supplier: supplierName,
@@ -96,6 +98,15 @@ export async function saveCostModel(db: Db, userId: string, body: SaveCostModelB
   const rows = body.rows.filter(costRowHasContent)
 
   return db.transaction(async (tx) => {
+    // Same-day copies get "(2)", "(3)"... The lock makes two saves of the same
+    // name at the same moment take turns, so they can't both pick "(2)".
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${baseName}))`)
+    const taken = await tx
+      .select({ name: costModels.name })
+      .from(costModels)
+      .where(or(eq(costModels.name, baseName), like(costModels.name, `${baseName.replace(/[\\%_]/g, m => `\\${m}`)} (%)`)))
+    const name = nextCostModelName(baseName, taken.map(t => t.name))
+
     const [model] = await tx
       .insert(costModels)
       .values({
@@ -151,19 +162,19 @@ export const COST_MODELS_PAGE_SIZE = 25
 /** Newest first. `q` matches name, supplier, category, sub-category, or any product no./description inside. */
 export async function listCostModels(db: Db, q: string, page: number): Promise<CostModelListResponse> {
   const term = q.trim()
-  const like = `%${term.replace(/[\\%_]/g, m => `\\${m}`)}%`
+  const pattern = `%${term.replace(/[\\%_]/g, m => `\\${m}`)}%`
   const where = term
     ? or(
-        ilike(costModels.name, like),
-        ilike(costModels.supplierName, like),
-        ilike(costCategories.name, like),
-        ilike(costSubCategories.name, like),
+        ilike(costModels.name, pattern),
+        ilike(costModels.supplierName, pattern),
+        ilike(costCategories.name, pattern),
+        ilike(costSubCategories.name, pattern),
         exists(
           db.select({ one: sql`1` })
             .from(costModelRows)
             .where(and(
               eq(costModelRows.modelId, costModels.id),
-              or(ilike(costModelRows.productNo, like), ilike(costModelRows.description, like))
+              or(ilike(costModelRows.productNo, pattern), ilike(costModelRows.description, pattern))
             ))
         )
       )
@@ -227,6 +238,77 @@ export async function listCostModels(db: Db, q: string, page: number): Promise<C
 }
 
 /* ------------------------------------------------------------------ */
+/* Saved row -> the inputs the form and maths use                      */
+/* ------------------------------------------------------------------ */
+
+const level = (l: string | null, w: string | null, h: string | null, q: number | null): PackLevelInput =>
+  ({ lengthCm: numOrNull(l), widthCm: numOrNull(w), heightCm: numOrNull(h), qtyInside: q })
+
+export function rowInputFromDb(r: typeof costModelRows.$inferSelect): CostModelRowInput {
+  return {
+    productNo: r.productNo,
+    description: r.description,
+    carton: level(r.cartonLengthCm, r.cartonWidthCm, r.cartonHeightCm, r.cartonQty),
+    outer: level(r.outerLengthCm, r.outerWidthCm, r.outerHeightCm, r.outerQty),
+    pallet: level(r.palletLengthCm, r.palletWidthCm, r.palletHeightCm, r.palletQty),
+    fobCurrency: r.fobCurrency,
+    fobPrice: numOrNull(r.fobPrice),
+    toolingCost: numOrNull(r.toolingCost),
+    dutyPercent: numOrNull(r.dutyPercent),
+    buyerBuyPrice: numOrNull(r.buyerBuyPrice),
+    rrpIncGst: numOrNull(r.rrpIncGst)
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Product look-up (Step 11.8d)                                        */
+/* ------------------------------------------------------------------ */
+
+export const COST_PRODUCT_SUGGESTIONS = 10
+
+/**
+ * Previously costed products whose product no. contains `q` (ignoring case):
+ * the MOST RECENT saved version of each, product nos. starting with `q` first.
+ * Product nos. are unique across RHG, so the number alone identifies a product.
+ */
+export async function findCostProducts(db: Db, q: string): Promise<CostProductSuggestion[]> {
+  const term = q.trim().toLowerCase()
+  if (!term) return []
+  const pattern = `%${term.replace(/[\\%_]/g, m => `\\${m}`)}%`
+
+  const latest = await db
+    .selectDistinctOn([sql`lower(${costModelRows.productNo})`], {
+      row: costModelRows,
+      modelId: costModels.id,
+      modelName: costModels.name,
+      supplierName: costModels.supplierName,
+      savedAt: costModels.createdAt
+    })
+    .from(costModelRows)
+    .innerJoin(costModels, eq(costModels.id, costModelRows.modelId))
+    .where(ilike(costModelRows.productNo, pattern))
+    .orderBy(sql`lower(${costModelRows.productNo})`, desc(costModels.createdAt), desc(costModelRows.id))
+    .limit(200)
+
+  return latest
+    .map(l => ({
+      productNo: l.row.productNo!,
+      description: l.row.description,
+      input: rowInputFromDb(l.row),
+      modelId: l.modelId,
+      modelName: l.modelName,
+      supplierName: l.supplierName,
+      savedAt: l.savedAt.toISOString()
+    }))
+    .sort((a, b) => {
+      const aStarts = a.productNo.toLowerCase().startsWith(term) ? 0 : 1
+      const bStarts = b.productNo.toLowerCase().startsWith(term) ? 0 : 1
+      return aStarts - bStarts || a.productNo.localeCompare(b.productNo, 'en', { sensitivity: 'base', numeric: true })
+    })
+    .slice(0, COST_PRODUCT_SUGGESTIONS)
+}
+
+/* ------------------------------------------------------------------ */
 /* Open one                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -256,9 +338,6 @@ export async function getCostModel(db: Db, id: number, canDelete: boolean): Prom
     .where(eq(costModelRows.modelId, id))
     .orderBy(costModelRows.sortOrder, costModelRows.id)
 
-  const level = (l: string | null, w: string | null, h: string | null, q: number | null): PackLevelInput =>
-    ({ lengthCm: numOrNull(l), widthCm: numOrNull(w), heightCm: numOrNull(h), qtyInside: q })
-
   return {
     id: m.model.id,
     name: m.model.name,
@@ -272,21 +351,7 @@ export async function getCostModel(db: Db, id: number, canDelete: boolean): Prom
     notes: m.model.notes,
     duplicatedFrom: m.sourceId ? { id: m.sourceId, name: m.sourceName! } : null,
     factorsSnapshot: m.model.factorsSnapshot,
-    rows: rows.map((r): CostModelRowInput & { id: number, results: typeof r.results } => ({
-      id: r.id,
-      productNo: r.productNo,
-      description: r.description,
-      carton: level(r.cartonLengthCm, r.cartonWidthCm, r.cartonHeightCm, r.cartonQty),
-      outer: level(r.outerLengthCm, r.outerWidthCm, r.outerHeightCm, r.outerQty),
-      pallet: level(r.palletLengthCm, r.palletWidthCm, r.palletHeightCm, r.palletQty),
-      fobCurrency: r.fobCurrency,
-      fobPrice: numOrNull(r.fobPrice),
-      toolingCost: numOrNull(r.toolingCost),
-      dutyPercent: numOrNull(r.dutyPercent),
-      buyerBuyPrice: numOrNull(r.buyerBuyPrice),
-      rrpIncGst: numOrNull(r.rrpIncGst),
-      results: r.results
-    })),
+    rows: rows.map(r => ({ id: r.id, ...rowInputFromDb(r), results: r.results })),
     createdAt: m.model.createdAt.toISOString(),
     createdByName: personName(m.createdByName, m.createdByEmail),
     canDelete

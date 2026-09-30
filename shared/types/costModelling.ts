@@ -80,3 +80,15 @@ export interface CostModelDetail {
   /** Admin or owner. */
   canDelete: boolean
 }
+
+/** GET /api/tools/cost-modelling/products?q= (Step 11.8d) */
+export interface CostProductSuggestion {
+  productNo: string
+  description: string | null
+  /** Everything as last saved, ready to fill a form row. */
+  input: CostModelRowInput
+  modelId: number
+  modelName: string
+  supplierName: string
+  savedAt: string
+}

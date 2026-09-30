@@ -1,0 +1,1 @@
+CREATE INDEX "cost_model_rows_product_no_idx" ON "cost_model_rows" USING btree (lower("product_no"));

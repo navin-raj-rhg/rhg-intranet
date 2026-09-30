@@ -36,6 +36,13 @@
       "when": 1790763704213,
       "tag": "0004_flawless_silver_sable",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790784568570,
+      "tag": "0005_keen_mauler",
+      "breakpoints": true
     }
   ]
 }

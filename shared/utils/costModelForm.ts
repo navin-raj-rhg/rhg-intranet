@@ -32,6 +32,8 @@ export interface CostFormRow {
   dutyPercent: string
   buyerBuyPrice: string
   rrpIncGst: string
+  /** Where empty cells were filled from (Step 11.8d; shown on the row, not saved). */
+  filledFrom?: string
 }
 
 export type FormNumberField = 'fobPrice' | 'toolingCost' | 'dutyPercent' | 'buyerBuyPrice' | 'rrpIncGst'
@@ -205,4 +207,43 @@ export function costFormRowFromSaved(key: number, saved: CostRowInput & { produc
     buyerBuyPrice: s(saved.buyerBuyPrice),
     rrpIncGst: s(saved.rrpIncGst)
   }
+}
+
+/**
+ * Fills a row's EMPTY cells from a previously saved product (Step 11.8d);
+ * anything already typed is kept. The currency is taken from the saved product
+ * only while the FOB price is still empty (so it always matches that price).
+ * Returns the updated row and how many cells were filled.
+ */
+export function fillEmptyCostFormCells(
+  row: CostFormRow,
+  saved: CostRowInput & { productNo: string | null, description: string | null },
+  source: string
+): { row: CostFormRow, filled: number } {
+  const from = costFormRowFromSaved(row.key, saved)
+  // Copied by hand (not structuredClone): the form's rows are Vue reactive
+  // proxies, which structuredClone refuses to copy.
+  const next: CostFormRow = { ...row, carton: { ...row.carton }, outer: { ...row.outer }, pallet: { ...row.pallet } }
+  let filled = 0
+
+  // Plain text cells, then the packing cells, then the price cells.
+  const textFields = ['productNo', 'description', 'fobPrice', 'toolingCost', 'dutyPercent', 'buyerBuyPrice', 'rrpIncGst'] as const
+
+  if (next.fobPrice.trim() === '' && from.fobPrice.trim() !== '') next.fobCurrency = from.fobCurrency
+  for (const f of textFields) {
+    if (next[f].trim() === '' && from[f].trim() !== '') {
+      next[f] = from[f]
+      filled++
+    }
+  }
+  for (const k of ['carton', 'outer', 'pallet'] as const) {
+    for (const f of ['l', 'w', 'h', 'qty'] as const) {
+      if (next[k][f].trim() === '' && from[k][f].trim() !== '') {
+        next[k][f] = from[k][f]
+        filled++
+      }
+    }
+  }
+  if (filled > 0) next.filledFrom = source
+  return { row: next, filled }
 }

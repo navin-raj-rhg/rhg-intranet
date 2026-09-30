@@ -314,6 +314,23 @@ export function costModelName(p: {
     .join(' - ')
 }
 
+/**
+ * Same-day copies would otherwise share a name. Given the names already taken
+ * that start with `base`, returns `base` if it's free, else `base (2)`, `(3)`...
+ * (one more than the highest number used, so a deleted one isn't reused).
+ */
+export function nextCostModelName(base: string, taken: string[]): string {
+  let highest = 0
+  for (const name of taken) {
+    if (name === base) highest = Math.max(highest, 1)
+    else if (name.startsWith(`${base} (`)) {
+      const n = Number(/^ \((\d+)\)$/.exec(name.slice(base.length))?.[1])
+      if (Number.isInteger(n) && n > 1) highest = Math.max(highest, n)
+    }
+  }
+  return highest === 0 ? base : `${base} (${highest + 1})`
+}
+
 export function formatAud(n: number | null, decimals = 2): string {
   if (n === null || !Number.isFinite(n)) return '—'
   return n.toLocaleString('en-AU', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
