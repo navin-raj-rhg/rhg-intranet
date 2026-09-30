@@ -15,7 +15,7 @@ const { data, error, refresh } = await useAsyncData('cost-modelling-factors', ()
 )
 
 const canEdit = computed(() => data.value?.canEdit ?? false)
-const size = ref<ContainerSize>('c20')
+const SIZES: ContainerSize[] = ['c20', 'c40hc']
 
 /* ------------------------------------------------------------------ */
 /* Form state: every cell is text while typing                         */
@@ -94,30 +94,37 @@ const localTotal = (destId: number, s: ContainerSize) =>
 const containerCost = (originId: number, destId: number, s: ContainerSize) =>
   val(form.freight[fKey(originId, destId)]?.[s]) * val(form.usdToAud) + localTotal(destId, s)
 
-/** Per ship-from port: the AU port with the highest cost per container. */
-const worstPort = computed(() => Object.fromEntries(origins.value.map((o) => {
-  let worst: number | null = null
-  let worstCost = 0 // nothing highlighted until a port actually costs something
-  for (const d of destinations.value) {
-    const c = containerCost(o.id, d.id, size.value)
-    if (c > worstCost) {
-      worstCost = c
-      worst = d.id
+/** Per ship-from port and container size: the AU port with the highest cost per container. */
+const worstPort = computed(() => {
+  const out: Record<string, number | null> = {}
+  for (const o of origins.value) {
+    for (const sz of SIZES) {
+      let worst: number | null = null
+      let worstCost = 0 // nothing highlighted until a port actually costs something
+      for (const d of destinations.value) {
+        const c = containerCost(o.id, d.id, sz)
+        if (c > worstCost) {
+          worstCost = c
+          worst = d.id
+        }
+      }
+      out[`${o.id}:${sz}`] = worst
     }
   }
-  return [o.id, worst]
-})))
+  return out
+})
 
-/** How many cells are still 0 for a container size (shown on the switch). */
+/** How many cells are still 0 for a container size (shown in the summary line). */
 function blankCount(s: ContainerSize) {
   return Object.values(form.freight).filter(p => val(p[s]) === 0).length
     + Object.values(form.local).filter(p => val(p[s]) === 0).length
 }
 
-const sizeItems = computed(() => (['c20', 'c40hc'] as const).map((s) => {
-  const blanks = blankCount(s)
-  return { label: `${CONTAINER_LABELS[s]}${blanks ? ` (${blanks} blank)` : ''}`, value: s }
-}))
+const blankSummary = computed(() => SIZES
+  .map(sz => ({ label: CONTAINER_LABELS[sz], n: blankCount(sz) }))
+  .filter(b => b.n > 0)
+  .map(b => `${b.label} ${b.n}`)
+  .join(' · '))
 
 /* ------------------------------------------------------------------ */
 /* Save / discard                                                      */
@@ -195,7 +202,7 @@ const updatedText = computed(() => {
 })
 
 const money = (text: string | undefined) => formatAud(val(text))
-const cellClass = 'w-24 text-right'
+const cellClass = 'w-20 text-right'
 </script>
 
 <template>
@@ -218,21 +225,15 @@ const cellClass = 'w-24 text-right'
         :description="data.notReadyReason"
       />
 
-      <div class="flex flex-wrap items-center justify-between gap-4">
-        <p class="text-sm text-muted">
-          {{ updatedText }}
-          <template v-if="!canEdit">
-            · Only Cost Modelling admins can change Factors.
-          </template>
-        </p>
-        <UTabs
-          v-model="size"
-          :items="sizeItems"
-          :content="false"
-          size="sm"
-          class="w-auto"
-        />
-      </div>
+      <p class="text-sm text-muted">
+        {{ updatedText }}
+        <template v-if="!canEdit">
+          · Only Cost Modelling admins can change Factors.
+        </template>
+        <template v-if="blankSummary">
+          · Still blank: <span data-testid="blank-summary">{{ blankSummary }}</span>
+        </template>
+      </p>
 
       <!-- Exchange rates and container capacity -->
       <UCard>
@@ -327,27 +328,46 @@ const cellClass = 'w-24 text-right'
       <UCard>
         <template #header>
           <div>
-            <span class="font-medium">Freight – USD per {{ CONTAINER_LABELS[size] }} container</span>
+            <span class="font-medium">Freight – USD per container</span>
             <p class="text-sm text-muted">
-              Ship-from port to AU port. Switch 20' / 40HC above.
+              Ship-from port to AU port, 20' and 40HC side by side.
             </p>
           </div>
         </template>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
-              <tr class="text-left text-muted">
-                <th class="sticky left-0 bg-default py-2 pr-4 font-medium">
+              <tr class="text-muted">
+                <th
+                  rowspan="2"
+                  class="sticky left-0 z-10 bg-default py-2 pr-4 text-left align-bottom font-medium"
+                >
                   Ship from
                 </th>
                 <th
                   v-for="d in destinations"
                   :key="d.id"
-                  class="px-2 py-2 text-right font-medium"
+                  colspan="2"
+                  class="border-l border-default px-2 pt-2 text-center font-medium"
                   :title="d.name"
                 >
                   {{ d.code }}
                 </th>
+              </tr>
+              <tr class="text-xs text-muted">
+                <template
+                  v-for="d in destinations"
+                  :key="d.id"
+                >
+                  <th
+                    v-for="sz in SIZES"
+                    :key="sz"
+                    class="px-2 pb-2 text-right font-normal"
+                    :class="sz === 'c20' ? 'border-l border-default' : ''"
+                  >
+                    {{ CONTAINER_LABELS[sz] }}
+                  </th>
+                </template>
               </tr>
             </thead>
             <tbody>
@@ -356,32 +376,38 @@ const cellClass = 'w-24 text-right'
                 :key="o.id"
                 class="border-t border-default"
               >
-                <td class="sticky left-0 bg-default py-2 pr-4 font-medium">
+                <td class="sticky left-0 z-10 bg-default py-2 pr-4 font-medium">
                   {{ o.name }}
                 </td>
-                <td
+                <template
                   v-for="d in destinations"
                   :key="d.id"
-                  class="px-2 py-1 text-right"
                 >
-                  <UInput
-                    v-if="canEdit && form.freight[fKey(o.id, d.id)]"
-                    v-model="form.freight[fKey(o.id, d.id)]![size]"
-                    inputmode="decimal"
-                    size="sm"
-                    :class="cellClass"
-                    :ui="{ base: 'text-right' }"
-                    :color="bad(form.freight[fKey(o.id, d.id)]![size]) ? 'error' : undefined"
-                    :highlight="bad(form.freight[fKey(o.id, d.id)]![size])"
-                    :aria-label="`Freight ${o.name} to ${d.code} ${CONTAINER_LABELS[size]}`"
-                  />
-                  <span
-                    v-else
-                    :class="val(form.freight[fKey(o.id, d.id)]?.[size]) === 0 ? 'text-dimmed' : ''"
+                  <td
+                    v-for="sz in SIZES"
+                    :key="sz"
+                    class="px-1 py-1 text-right"
+                    :class="sz === 'c20' ? 'border-l border-default' : ''"
                   >
-                    {{ money(form.freight[fKey(o.id, d.id)]?.[size]) }}
-                  </span>
-                </td>
+                    <UInput
+                      v-if="canEdit && form.freight[fKey(o.id, d.id)]"
+                      v-model="form.freight[fKey(o.id, d.id)]![sz]"
+                      inputmode="decimal"
+                      size="sm"
+                      :class="cellClass"
+                      :ui="{ base: 'text-right' }"
+                      :color="bad(form.freight[fKey(o.id, d.id)]![sz]) ? 'error' : undefined"
+                      :highlight="bad(form.freight[fKey(o.id, d.id)]![sz])"
+                      :aria-label="`Freight ${o.name} to ${d.code} ${CONTAINER_LABELS[sz]}`"
+                    />
+                    <span
+                      v-else
+                      :class="val(form.freight[fKey(o.id, d.id)]?.[sz]) === 0 ? 'text-dimmed' : ''"
+                    >
+                      {{ money(form.freight[fKey(o.id, d.id)]?.[sz]) }}
+                    </span>
+                  </td>
+                </template>
               </tr>
             </tbody>
           </table>
@@ -392,7 +418,7 @@ const cellClass = 'w-24 text-right'
       <UCard>
         <template #header>
           <div>
-            <span class="font-medium">Local costs – AUD per {{ CONTAINER_LABELS[size] }} container</span>
+            <span class="font-medium">Local costs – AUD per container</span>
             <p class="text-sm text-muted">
               Charges at the AU port. All lines are added together per container.
             </p>
@@ -401,18 +427,37 @@ const cellClass = 'w-24 text-right'
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
-              <tr class="text-left text-muted">
-                <th class="sticky left-0 bg-default py-2 pr-4 font-medium">
+              <tr class="text-muted">
+                <th
+                  rowspan="2"
+                  class="sticky left-0 z-10 bg-default py-2 pr-4 text-left align-bottom font-medium"
+                >
                   Charge
                 </th>
                 <th
                   v-for="d in destinations"
                   :key="d.id"
-                  class="px-2 py-2 text-right font-medium"
+                  colspan="2"
+                  class="border-l border-default px-2 pt-2 text-center font-medium"
                   :title="d.name"
                 >
                   {{ d.code }}
                 </th>
+              </tr>
+              <tr class="text-xs text-muted">
+                <template
+                  v-for="d in destinations"
+                  :key="d.id"
+                >
+                  <th
+                    v-for="sz in SIZES"
+                    :key="sz"
+                    class="px-2 pb-2 text-right font-normal"
+                    :class="sz === 'c20' ? 'border-l border-default' : ''"
+                  >
+                    {{ CONTAINER_LABELS[sz] }}
+                  </th>
+                </template>
               </tr>
             </thead>
             <tbody>
@@ -421,45 +466,57 @@ const cellClass = 'w-24 text-right'
                 :key="f.id"
                 class="border-t border-default"
               >
-                <td class="sticky left-0 bg-default py-2 pr-4 whitespace-nowrap">
+                <td class="sticky left-0 z-10 bg-default py-2 pr-4 whitespace-nowrap">
                   {{ f.name }}
                 </td>
-                <td
+                <template
                   v-for="d in destinations"
                   :key="d.id"
-                  class="px-2 py-1 text-right"
                 >
-                  <UInput
-                    v-if="canEdit && form.local[lKey(d.id, f.id)]"
-                    v-model="form.local[lKey(d.id, f.id)]![size]"
-                    inputmode="decimal"
-                    size="sm"
-                    :class="cellClass"
-                    :ui="{ base: 'text-right' }"
-                    :color="bad(form.local[lKey(d.id, f.id)]![size]) ? 'error' : undefined"
-                    :highlight="bad(form.local[lKey(d.id, f.id)]![size])"
-                    :aria-label="`${f.name} ${d.code} ${CONTAINER_LABELS[size]}`"
-                  />
-                  <span
-                    v-else
-                    :class="val(form.local[lKey(d.id, f.id)]?.[size]) === 0 ? 'text-dimmed' : ''"
+                  <td
+                    v-for="sz in SIZES"
+                    :key="sz"
+                    class="px-1 py-1 text-right"
+                    :class="sz === 'c20' ? 'border-l border-default' : ''"
                   >
-                    {{ money(form.local[lKey(d.id, f.id)]?.[size]) }}
-                  </span>
-                </td>
+                    <UInput
+                      v-if="canEdit && form.local[lKey(d.id, f.id)]"
+                      v-model="form.local[lKey(d.id, f.id)]![sz]"
+                      inputmode="decimal"
+                      size="sm"
+                      :class="cellClass"
+                      :ui="{ base: 'text-right' }"
+                      :color="bad(form.local[lKey(d.id, f.id)]![sz]) ? 'error' : undefined"
+                      :highlight="bad(form.local[lKey(d.id, f.id)]![sz])"
+                      :aria-label="`${f.name} ${d.code} ${CONTAINER_LABELS[sz]}`"
+                    />
+                    <span
+                      v-else
+                      :class="val(form.local[lKey(d.id, f.id)]?.[sz]) === 0 ? 'text-dimmed' : ''"
+                    >
+                      {{ money(form.local[lKey(d.id, f.id)]?.[sz]) }}
+                    </span>
+                  </td>
+                </template>
               </tr>
               <tr class="border-t-2 border-default font-semibold">
-                <td class="sticky left-0 bg-default py-2 pr-4">
+                <td class="sticky left-0 z-10 bg-default py-2 pr-4">
                   Total
                 </td>
-                <td
+                <template
                   v-for="d in destinations"
                   :key="d.id"
-                  class="px-2 py-2 text-right"
-                  :data-testid="`local-total-${d.code}`"
                 >
-                  {{ formatAud(localTotal(d.id, size)) }}
-                </td>
+                  <td
+                    v-for="sz in SIZES"
+                    :key="sz"
+                    class="px-2 py-2 text-right"
+                    :class="sz === 'c20' ? 'border-l border-default' : ''"
+                    :data-testid="`local-total-${d.code}-${sz}`"
+                  >
+                    {{ formatAud(localTotal(d.id, sz)) }}
+                  </td>
+                </template>
               </tr>
             </tbody>
           </table>
@@ -470,27 +527,47 @@ const cellClass = 'w-24 text-right'
       <UCard>
         <template #header>
           <div>
-            <span class="font-medium">Cost per {{ CONTAINER_LABELS[size] }} container – AUD</span>
+            <span class="font-medium">Cost per container – AUD</span>
             <p class="text-sm text-muted">
               Freight converted at the USD rate, plus local costs. Cost models use the
-              <strong class="text-highlighted">highlighted</strong> (most expensive) AU port for each ship-from port.
+              <strong class="text-highlighted">highlighted</strong> (most expensive) AU port for each ship-from port and container size.
             </p>
           </div>
         </template>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
-              <tr class="text-left text-muted">
-                <th class="sticky left-0 bg-default py-2 pr-4 font-medium">
+              <tr class="text-muted">
+                <th
+                  rowspan="2"
+                  class="sticky left-0 z-10 bg-default py-2 pr-4 text-left align-bottom font-medium"
+                >
                   Ship from
                 </th>
                 <th
                   v-for="d in destinations"
                   :key="d.id"
-                  class="px-2 py-2 text-right font-medium"
+                  colspan="2"
+                  class="border-l border-default px-2 pt-2 text-center font-medium"
+                  :title="d.name"
                 >
                   {{ d.code }}
                 </th>
+              </tr>
+              <tr class="text-xs text-muted">
+                <template
+                  v-for="d in destinations"
+                  :key="d.id"
+                >
+                  <th
+                    v-for="sz in SIZES"
+                    :key="sz"
+                    class="px-2 pb-2 text-right font-normal"
+                    :class="sz === 'c20' ? 'border-l border-default' : ''"
+                  >
+                    {{ CONTAINER_LABELS[sz] }}
+                  </th>
+                </template>
               </tr>
             </thead>
             <tbody>
@@ -499,21 +576,27 @@ const cellClass = 'w-24 text-right'
                 :key="o.id"
                 class="border-t border-default"
               >
-                <td class="sticky left-0 bg-default py-2 pr-4 font-medium">
+                <td class="sticky left-0 z-10 bg-default py-2 pr-4 font-medium">
                   {{ o.name }}
                 </td>
-                <td
+                <template
                   v-for="d in destinations"
                   :key="d.id"
-                  class="px-2 py-2 text-right"
-                  :data-testid="`container-cost-${o.code}-${d.code}`"
                 >
-                  <span
-                    :class="worstPort[o.id] === d.id ? 'rounded bg-warning/15 px-1.5 py-0.5 font-semibold text-highlighted' : ''"
+                  <td
+                    v-for="sz in SIZES"
+                    :key="sz"
+                    class="px-2 py-2 text-right"
+                    :class="sz === 'c20' ? 'border-l border-default' : ''"
+                    :data-testid="`container-cost-${o.code}-${d.code}-${sz}`"
                   >
-                    {{ formatAud(containerCost(o.id, d.id, size), 0) }}
-                  </span>
-                </td>
+                    <span
+                      :class="worstPort[`${o.id}:${sz}`] === d.id ? 'rounded bg-warning/15 px-1.5 py-0.5 font-semibold text-highlighted' : ''"
+                    >
+                      {{ formatAud(containerCost(o.id, d.id, sz), 0) }}
+                    </span>
+                  </td>
+                </template>
               </tr>
             </tbody>
           </table>
