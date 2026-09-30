@@ -2,8 +2,8 @@
 
 Internal company portal: Nuxt 4 + TypeScript + Nuxt UI 4 + Pinia + Drizzle ORM
 (Supabase Postgres) + Cloudflare R2, deployed on Railway. A dashboard plus a
-launcher for internal tools. Built so far: Expense Claims (Step 7) and Leave
-Applications (Step 10). The sections below are written step by step; the
+launcher for internal tools. Built so far: Expense Claims (Step 7), Leave
+Applications (Step 10) and Cost Modelling (Step 11). The sections below are written step by step; the
 "What's here so far" list and the Step 2 to 5 wording describe the state at
 that step, so later step sections win where they differ. The project status
 document (kept in the Claude project) has the current overview and roadmap.
@@ -646,3 +646,142 @@ real migrations, and the pages were driven in a real headless browser against a
 mocked API (including the phone layout). You tested each sub-step against the
 real Supabase, including the apply/approve/reject/cancel flows, balances, date
 restrictions and the calendar.
+
+## Step 11: Cost Modelling
+
+The third full tool. It costs imported products from the supplier's FOB price
+to a landed cost in AUD at each Australian port: container fill, freight, port
+local costs, duty, shipping per unit and margins. Built in sub-steps 11.1 to
+11.10 (11.8 was split into 11.8a list/view, 11.8b new-model form, 11.8c
+duplicate/delete, 11.8d product look-up).
+
+### Roles
+
+- **Roles** (tool: `cost-modelling`): `user` and `admin`; the owner bypasses as
+  everywhere. No employee/manager links (the tool has no approval chain), so
+  Manage access shows just two tickboxes per person.
+- **User:** open the tool, view Factors, create / view / duplicate cost models,
+  add categories and sub-categories.
+- **Admin:** everything a User can do, plus **edit Factors** and **delete** cost
+  models. (Ticking Admin alone also works - Admin includes User's rights.)
+
+### Two tabs
+
+- **Factors** - the live numbers every new model uses: USD->AUD and CNY->AUD,
+  usable container CBM (20' 28, 40HC 68 by default), ocean **freight in USD**
+  per 20' and 40HC for each ship-from port -> AU port, and **local costs in AUD**
+  per 20' and 40HC for each AU port and charge line. All shown side by side, with
+  totals and a "cost per container" check that highlights the most expensive AU
+  port. Read-only for users; admins get inputs and a Save bar. Two admins can't
+  overwrite each other (the save carries the version it started from; a stale
+  one is refused with a "reload" message).
+- **Cost Model** - the saved models (search + paging), a read-only view of one
+  model, the new-model form, Duplicate and Delete. The URL decides what shows:
+  `?model=12` (one model), `?new=1` (form), `?new=1&from=12` (duplicate of 12).
+
+### The maths (`shared/utils/costModel.ts`, unit tested)
+
+- **Packing:** carton, outer carton and pallet, each L x W x H in cm and a
+  "qty inside" = what's **directly** inside (carton: units; outer: cartons, or
+  units if there's no carton; pallet: outers, or cartons, or units). CBM =
+  L x W x H / 1,000,000.
+- **Shipping unit:** the pallet if filled in, else the outer, else the carton.
+  **Units per container** = whole shipping units that fit by volume x units in
+  each (volume only - no weight or stacking limits).
+- **Net COGS (AUD)** = FOB x exchange rate + duty % (per row, blank = 0%, on the
+  FOB value). **Tooling** is converted and shown separately - never in unit cost.
+- **Shipping per unit** = (freight USD x rate + the port's local costs) / units
+  per container, per container size.
+- **Landed cost** = Net COGS + shipping, shown for **every AU port** for the
+  model's chosen container size (20' or 40HC). **Margins use the most expensive
+  port** (a deliberate buffer).
+- **Rapid GM** = (buyer buy price - landed) / buyer buy price.
+  **RRP ex GST** = RRP / 1.1. **Buyer GM** = (RRP ex GST - buy price) / RRP ex GST.
+- Missing inputs give "—" and a warning, never a wrong number.
+
+### Saving, duplicating, looking up products
+
+- **Saved models are final** - no edit. The server recalculates every figure
+  itself from the live Factors, then **freezes** both the Factors used
+  (`factors_snapshot`) and every figure (`results` per row), so a model never
+  changes when Factors do. If Factors changed while someone was filling in the
+  form, the save is refused and the screen refreshes to the new rates.
+- **Name** is built automatically: *Category - Sub-category - Supplier - dd/mm/yyyy*;
+  same-day repeats get *(2)*, *(3)*... (numbers of deleted models aren't reused;
+  simultaneous saves are serialised with an advisory lock).
+- **Duplicate** prefills the form from a saved model but costs it with **today's**
+  Factors (the form says which exchange rates changed), and records
+  "copied from" on the new model.
+- **Delete** is admin/owner only; a model's product rows go with it, copies are kept.
+- **Product look-up:** typing in a row's product no. offers previously costed
+  products (the **most recent saved version** of each; product nos. are unique
+  across RHG). Picking one fills **only the empty cells** of the row - sizes,
+  quantities, currency, prices, duty - and marks the row "filled from".
+- **Categories / sub-categories** are one shared list; anyone with the tool can
+  add from the dropdown ("Create ..."). Names are tidied and unique ignoring case.
+
+### How it fits together
+
+- **Schema** `server/db/schema/costModelling.ts`: `cost_ports` (origin /
+  destination), `cost_local_fee_types`, `cost_factor_settings` (one row),
+  `cost_freight_rates`, `cost_local_costs`, `cost_categories`,
+  `cost_sub_categories`, `cost_models`, `cost_model_rows`. Migrations
+  `0004_flawless_silver_sable.sql` (tables) and `0005_keen_mauler.sql`
+  (product no. look-up index).
+- **Pure logic** (no DB; shared by server, forms and tests): `shared/utils/costModel.ts`
+  (maths, naming, formatting), `costFactors.ts` (Factors -> per-port figures for
+  one origin), `costModelForm.ts` (form text -> numbers, blocking problems, fill
+  from a saved product), `costCategories.ts` (name tidying). Types in
+  `shared/types/costModelling.ts`.
+- **Server helpers** `server/utils/`: `costFactors.ts` (load/save Factors, role
+  constants), `costCategories.ts` (find-or-create), `costModels.ts` (save, list/search,
+  open, product look-up).
+- **API** under `server/api/tools/cost-modelling/`: `my-role`, `factors` (GET
+  everyone / PUT admin), `categories` (GET, POST) and
+  `categories/[id]/sub-categories` (POST), `models` (GET `?q=&page=`, POST),
+  `models/[id]` (GET; DELETE admin), `products?q=`.
+- **Pages:** `app/pages/tools/cost-modelling/index.vue` (tabs; `?tab=factors`
+  opens Factors) and `access.vue` (Manage access).
+- **Components** `app/components/cost-modelling/`: `FactorsView`, `ModelsTab`,
+  `ModelList`, `ModelView`, `ProductResultsTable`, `FactorsSnapshot`,
+  `ModelForm`, `ProductNoInput`.
+- **Tests:** `pnpm test` now runs **82** tests (39 new for Cost Modelling).
+
+### One-time setup after applying this step
+
+1. `pnpm db:migrate` (migrations 0004 and 0005). Run locally - Railway does not migrate.
+2. Supabase SQL Editor: run `server/db/manual-sql/006_seed_cost_modelling.sql`
+   (registers the tool and its two roles, the 4 ship-from and 5 AU ports, the 12
+   local-cost lines, the Factors settings row, and a zero rate for every route
+   and port/charge pair). Safe to re-run; it never overwrites entered rates.
+3. As an admin, fill in **Factors** - models can't be saved until both exchange
+   rates are set.
+4. Give people **User** (and a few **Admin**) in Manage access.
+
+Adding a port or a local-cost line later: insert a `cost_ports` or
+`cost_local_fee_types` row, then re-run the last two inserts of seed 006 to
+create its zero rates; the screens pick it up automatically.
+
+### Known limitations (fine for the demo)
+
+- **No editing** saved models (by design) - Duplicate instead.
+- **Container fill is by volume only** - no weight limits, pallet stacking or
+  carton orientation.
+- **All local costs are treated as per-container**, although some (e.g. Doc Fee,
+  Customs Clearance) are really per shipment.
+- **Duty** is a % on the FOB value per row; no other import charges are modelled.
+- Categories / sub-categories **can't be renamed, merged or deleted** in the app
+  (SQL only, and only when no model uses them).
+- Ports and charge lines are added by SQL (see above), not from a screen.
+- The product look-up uses the most recent saved row per product no. - there is
+  no separate product catalogue.
+- Test models, categories and the fake test accounts should be cleared before
+  the director demo.
+
+**Verified:** `pnpm lint`, `pnpm typecheck`, `pnpm test` and the production build
+pass. Every API route was tested against a local Postgres built from the real
+migrations and seed (including simultaneous saves, stale-Factors refusals and
+access rules), and every screen was driven in a real headless browser against
+the real API with only the Supabase login faked - checked against hand-worked
+figures (e.g. 8,000 units per 20', landed 3.55 at SYD, margins 29.0% / 50.0%)
+and at phone width. You tested each sub-step against the real Supabase.
