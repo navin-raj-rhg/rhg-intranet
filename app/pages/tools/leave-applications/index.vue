@@ -14,16 +14,27 @@ const { data: roleData, pending, error } = await useAsyncData('leave-application
 
 const roles = computed(() => roleData.value?.roles ?? [])
 
-// The owner can apply too (they need a linked manager like everyone else).
+// The owner can apply too (they need a linked manager like everyone else) and
+// sees every team's approvals. Someone who is both an employee and a manager
+// gets both views, switchable with tabs, like Expense Claims.
 const canApplyForLeave = computed(() => roles.value.includes('employee') || roles.value.includes('owner'))
-const isManagerOnly = computed(() => roles.value.includes('manager') && !canApplyForLeave.value)
+const isManager = computed(() => roles.value.includes('manager') || roles.value.includes('owner'))
+
+const tab = ref<'manager' | 'employee'>(isManager.value ? 'manager' : 'employee')
+const tabItems = [
+  { label: 'Team approvals', value: 'manager' },
+  { label: 'My leave', value: 'employee' }
+]
+
+const showManagerView = computed(() => isManager.value && (!canApplyForLeave.value || tab.value === 'manager'))
+const showEmployeeView = computed(() => canApplyForLeave.value && (!isManager.value || tab.value === 'employee'))
 </script>
 
 <template>
   <UContainer class="py-10">
     <UPageHeader
       title="Leave Applications"
-      description="Apply for leave, check your balances and see the status of your requests."
+      description="Apply for leave and check your balances. Managers approve their team's leave here."
     >
       <template
         v-if="authStore.profile?.isOwner"
@@ -64,17 +75,17 @@ const isManagerOnly = computed(() => roles.value.includes('manager') && !canAppl
         description="You can't apply for leave until you are linked to a manager. The workspace owner can do this in Manage access."
       />
 
-      <UAlert
-        v-if="isManagerOnly"
+      <UTabs
+        v-if="canApplyForLeave && isManager"
+        v-model="tab"
         class="mt-6"
-        color="info"
-        variant="subtle"
-        title="Approvals are coming"
-        description="The team approvals inbox and the team calendar are being added next."
+        :items="tabItems"
+        :content="false"
       />
 
+      <LeaveApplicationsManagerView v-if="showManagerView" />
       <LeaveApplicationsEmployeeView
-        v-if="canApplyForLeave"
+        v-if="showEmployeeView"
         :can-apply="!roleData?.missingManager"
       />
     </template>

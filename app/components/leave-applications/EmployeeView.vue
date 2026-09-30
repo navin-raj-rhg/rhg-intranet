@@ -47,6 +47,17 @@ async function cancelLeave(app: MyLeaveApplication) {
   }
 }
 
+// --- View attachment (permission-checked route returns a short-lived link) ---
+async function viewAttachment(id: number) {
+  try {
+    const { attachmentUrl } = await useApiFetch<{ attachmentUrl: string | null }>(`/api/tools/leave-applications/applications/${id}`)
+    if (!attachmentUrl) throw new Error('No attachment')
+    window.open(attachmentUrl, '_blank')
+  } catch {
+    toast.add({ title: 'Could not open the attachment', color: 'error' })
+  }
+}
+
 const allowance = (b: { entitled: number, adjustments: number }) => b.entitled + b.adjustments
 </script>
 
@@ -168,16 +179,27 @@ const allowance = (b: { entitled: number, adjustments: number }) => b.entitled +
           </p>
         </div>
 
-        <UButton
-          v-if="app.canCancel"
-          size="xs"
-          variant="ghost"
-          color="error"
-          :loading="cancellingId === app.id"
-          @click="cancelLeave(app)"
-        >
-          Cancel
-        </UButton>
+        <div class="flex shrink-0 gap-2">
+          <UButton
+            v-if="app.attachmentKey"
+            size="xs"
+            variant="ghost"
+            icon="i-lucide-paperclip"
+            @click="viewAttachment(app.id)"
+          >
+            Attachment
+          </UButton>
+          <UButton
+            v-if="app.canCancel"
+            size="xs"
+            variant="ghost"
+            color="error"
+            :loading="cancellingId === app.id"
+            @click="cancelLeave(app)"
+          >
+            Cancel
+          </UButton>
+        </div>
       </div>
     </UCard>
 

@@ -113,3 +113,24 @@ export function describeHalfDays(a: {
   if (a.endHalfDay) parts.push('ends at lunchtime')
   return parts.join(', ')
 }
+
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
+
+/** Client-side sanity check for an attachment; null when it is fine. */
+export function checkAttachment(file: { type: string, size: number }): string | null {
+  if (!(file.type.startsWith('image/') || file.type === 'application/pdf')) {
+    return 'Please choose an image or a PDF.'
+  }
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    return 'The file is larger than 10 MB.'
+  }
+  if (file.size === 0) {
+    return 'The file is empty.'
+  }
+  return null
+}
+
+/** How to name a person in a list: their name, else their email. */
+export function personLabel(p: { employeeName?: string | null, employeeEmail?: string | null }): string {
+  return p.employeeName || p.employeeEmail || 'Unknown'
+}

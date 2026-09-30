@@ -2,6 +2,9 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   buildLeaveRequest,
+  checkAttachment,
+  MAX_ATTACHMENT_BYTES,
+  personLabel,
   DATE_FORMAT_HINT,
   describeHalfDays,
   formatDays,
@@ -84,4 +87,21 @@ test('half-day wording in the list', () => {
   assert.equal(describeHalfDays({ ...a, startHalfDay: true, endHalfDay: true }), 'starts in the afternoon, ends at lunchtime')
   assert.equal(describeHalfDays({ ...a, endDate: '2026-10-05', startHalfDay: true }), 'half day')
   assert.equal(describeHalfDays({ ...a, endDate: '2026-10-05' }), '')
+})
+
+test('attachment checks', () => {
+  assert.equal(checkAttachment({ type: 'application/pdf', size: 1000 }), null)
+  assert.equal(checkAttachment({ type: 'image/jpeg', size: 1000 }), null)
+  assert.equal(checkAttachment({ type: 'image/png', size: MAX_ATTACHMENT_BYTES }), null) // exactly at the limit
+  assert.match(checkAttachment({ type: 'image/png', size: MAX_ATTACHMENT_BYTES + 1 })!, /larger than 10 MB/)
+  assert.match(checkAttachment({ type: 'application/zip', size: 1000 })!, /image or a PDF/)
+  assert.match(checkAttachment({ type: '', size: 1000 })!, /image or a PDF/)
+  assert.match(checkAttachment({ type: 'application/pdf', size: 0 })!, /empty/)
+})
+
+test('person labels', () => {
+  assert.equal(personLabel({ employeeName: 'Ann', employeeEmail: 'a@x.com' }), 'Ann')
+  assert.equal(personLabel({ employeeName: null, employeeEmail: 'a@x.com' }), 'a@x.com')
+  assert.equal(personLabel({ employeeName: '', employeeEmail: 'a@x.com' }), 'a@x.com')
+  assert.equal(personLabel({}), 'Unknown')
 })

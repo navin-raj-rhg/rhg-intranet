@@ -29,6 +29,7 @@ export interface LeaveBalancesResponse {
 
 export interface MyLeaveApplication {
   id: number
+  employeeId: string
   leaveTypeId: number
   leaveTypeName: string
   startDate: string
@@ -38,6 +39,8 @@ export interface MyLeaveApplication {
   /** Postgres numeric, so a string such as '3.0'. */
   days: string
   reason: string | null
+  /** R2 key of an optional attachment; the file itself is fetched via the detail route. */
+  attachmentKey: string | null
   status: LeaveStatus
   decisionNote: string | null
   canCancel: boolean
@@ -47,3 +50,18 @@ export interface MyLeaveApplication {
 export type LeavePreviewResponse
   = | { ok: true, days: number, balanceChecks: CycleBalanceCheck[] }
     | { ok: false, message: string }
+
+/** A row of the team list (scope=team): the same as one's own, plus who it belongs to. */
+export interface TeamLeaveApplication extends MyLeaveApplication {
+  employeeName: string | null
+  employeeEmail: string | null
+  decidedAt: string | null
+}
+
+/** GET applications/:id - what the review dialog shows. */
+export interface LeaveApplicationDetail extends TeamLeaveApplication {
+  attachmentUrl: string | null
+  deciderName: string | null
+  /** For a pending application: what approving it does to the balance. Null once decided. */
+  balanceImpact: CycleBalanceCheck[] | null
+}

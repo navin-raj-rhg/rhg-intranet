@@ -16,6 +16,7 @@ const open = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ submitted: [] }>()
 
 const toast = useToast()
+const { uploadFile } = useR2Storage()
 
 const form = reactive({
   leaveTypeId: undefined as number | undefined,
@@ -26,7 +27,26 @@ const form = reactive({
   reason: ''
 })
 
+// Optional attachment (e.g. a medical certificate), uploaded when submitting.
+const attachment = ref<File | null>(null)
+const attachmentError = ref<string | undefined>()
+const fileInputRef = ref<HTMLInputElement | null>(null)
+
+function onFileChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0] ?? null
+  attachmentError.value = file ? (checkAttachment(file) ?? undefined) : undefined
+  attachment.value = file && !attachmentError.value ? file : null
+  if (attachmentError.value && fileInputRef.value) fileInputRef.value.value = ''
+}
+
+function clearAttachment() {
+  attachment.value = null
+  attachmentError.value = undefined
+  if (fileInputRef.value) fileInputRef.value.value = ''
+}
+
 function resetForm() {
+  clearAttachment()
   form.leaveTypeId = undefined
   form.startText = ''
   form.endText = ''
@@ -98,6 +118,7 @@ onBeforeUnmount(() => clearTimeout(timer))
 
 /* ---- submit ---- */
 const submitting = ref(false)
+const submitStage = ref<'uploading' | 'saving'>('saving')
 const canSubmit = computed(() =>
   props.canApply
   && !submitting.value
@@ -108,12 +129,26 @@ const canSubmit = computed(() =>
 
 async function submit() {
   if (parsed.value.status !== 'ready' || !canSubmit.value) return
+  const request = parsed.value.request
 
   submitting.value = true
   try {
+    let attachmentKey: string | undefined
+    if (attachment.value) {
+      submitStage.value = 'uploading'
+      try {
+        attachmentKey = await uploadFile('leave-applications', attachment.value)
+      } catch (err) {
+        // Don't submit without the file the person meant to attach.
+        toast.add({ title: 'Could not upload the attachment', description: errorText(err), color: 'error' })
+        return
+      }
+    }
+
+    submitStage.value = 'saving'
     await useApiFetch('/api/tools/leave-applications/applications', {
       method: 'POST',
-      body: { ...parsed.value.request, reason: form.reason.trim() || undefined }
+      body: { ...request, reason: form.reason.trim() || undefined, attachmentKey }
     })
     toast.add({ title: 'Leave application submitted', description: 'Your manager has been asked to approve it.', color: 'success' })
     open.value = false
@@ -208,6 +243,45 @@ async function submit() {
           />
         </UFormField>
 
+        <UFormField
+          label="Attachment (optional)"
+          help="For example a medical certificate. An image or a PDF, up to 10 MB."
+          :error="attachmentError"
+        >
+          <div class="flex items-center gap-3">
+            <UButton
+              type="button"
+              variant="outline"
+              color="neutral"
+              size="sm"
+              icon="i-lucide-paperclip"
+              @click="fileInputRef?.click()"
+            >
+              Choose file
+            </UButton>
+            <span class="truncate text-sm text-muted">
+              {{ attachment?.name || 'No file chosen' }}
+            </span>
+            <UButton
+              v-if="attachment"
+              type="button"
+              variant="ghost"
+              color="neutral"
+              size="xs"
+              icon="i-lucide-x"
+              aria-label="Remove attachment"
+              @click="clearAttachment"
+            />
+          </div>
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept="image/*,application/pdf"
+            class="hidden"
+            @change="onFileChange"
+          >
+        </UFormField>
+
         <div
           v-if="previewing"
           class="text-sm text-muted"
@@ -276,7 +350,7 @@ async function submit() {
           :disabled="!canSubmit"
           :loading="submitting"
         >
-          Submit application
+          {{ submitting && submitStage === 'uploading' ? 'Uploading…' : 'Submit application' }}
         </UButton>
       </div>
     </template>
