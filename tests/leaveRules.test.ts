@@ -10,7 +10,8 @@ import {
   computeLeaveBalance,
   checkRequestAgainstBalance,
   findLeaveConflict,
-  canCancelLeave
+  canCancelLeave,
+  validateProfileDates
 } from '../shared/utils/leaveRules.ts'
 
 const r = (startDate: string, endDate: string, startHalfDay = false, endHalfDay = false) => ({
@@ -221,4 +222,19 @@ test('who can cancel and when', () => {
   assert.equal(canCancelLeave('approved', '2026-09-30', '2026-10-01'), false)
   assert.equal(canCancelLeave('rejected', '2026-12-01', '2026-10-01'), false)
   assert.equal(canCancelLeave('cancelled', '2026-12-01', '2026-10-01'), false)
+})
+
+test('owner-entered profile dates are sanity checked', () => {
+  const today = '2026-09-30'
+  const check = (joinDate: string | null, dateOfBirth: string | null) => validateProfileDates({ joinDate, dateOfBirth }, today)
+  assert.equal(check('2020-03-15', '1990-08-01'), null)
+  assert.equal(check(null, null), null) // clearing both is allowed
+  assert.equal(check('2020-03-15', null), null)
+  assert.equal(check('2026-12-01', '1990-08-01'), null) // starts soon
+  assert.match(check('2020-13-45', null)!, /valid/)
+  assert.match(check(null, '2026-09-30')!, /past/) // born today
+  assert.match(check(null, '2030-01-01')!, /past/)
+  assert.match(check(null, '1850-01-01')!, /past/)
+  assert.match(check('2062-01-01', null)!, /far in the future/) // typo of 2026
+  assert.match(check('1985-01-01', '1990-08-01')!, /after the date of birth/) // swapped
 })

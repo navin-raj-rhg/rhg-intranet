@@ -161,6 +161,36 @@ export function validateLeaveDates(range: LeaveDateRange): string | null {
 }
 
 /* ------------------------------------------------------------------ */
+/* Owner-entered profile dates                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Sanity checks for the join date and date of birth the owner types in, so a
+ * typo (a swapped pair, the year 2062) can't quietly change someone's tier or
+ * birthday leave. Either may be null (not set). Returns a message or null.
+ */
+export function validateProfileDates(
+  dates: { joinDate: ISODate | null, dateOfBirth: ISODate | null },
+  today: ISODate
+): string | null {
+  const { joinDate, dateOfBirth } = dates
+  if ((joinDate !== null && !isValidISODate(joinDate)) || (dateOfBirth !== null && !isValidISODate(dateOfBirth))) {
+    return 'Please enter valid dates.'
+  }
+  if (dateOfBirth !== null && (dateOfBirth >= today || dateOfBirth < '1900-01-01')) {
+    return 'The date of birth must be a past date.'
+  }
+  // A join date a little in the future is fine (someone about to start).
+  if (joinDate !== null && joinDate > addDaysISO(today, 366)) {
+    return 'The join date is too far in the future.'
+  }
+  if (joinDate !== null && dateOfBirth !== null && joinDate <= dateOfBirth) {
+    return 'The join date must be after the date of birth.'
+  }
+  return null
+}
+
+/* ------------------------------------------------------------------ */
 /* Clashes and cancelling                                              */
 /* ------------------------------------------------------------------ */
 

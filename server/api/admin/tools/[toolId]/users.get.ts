@@ -29,6 +29,9 @@ export default defineEventHandler(async (event) => {
     email: u.email,
     fullName: u.fullName,
     isOwner: u.isOwner,
+    // Shown so the owner can see and fix who is missing them (they drive leave tiers).
+    joinDate: u.joinDate,
+    dateOfBirth: u.dateOfBirth,
     createdAt: u.createdAt,
     roles: roleRows.filter(r => r.userId === u.id).map(r => r.roleKey),
     managerIds: linkRows.filter(l => l.employeeId === u.id).map(l => l.managerId)

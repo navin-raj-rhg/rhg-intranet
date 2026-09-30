@@ -17,17 +17,19 @@ const bodySchema = z.object({
   attachmentKey: z.string().min(1).optional()
 })
 
-// Only the 'employee' role (or the owner, testing) applies for leave. Managers
-// approve - a manager who also takes leave holds both roles.
+// Only the 'employee' role (or the owner) applies for leave. Managers approve;
+// a manager who also takes leave holds both roles.
 export default defineEventHandler(async (event) => {
-  const { profile, role } = await requireToolRole(event, LEAVE_TOOL_ID, ['employee'])
+  const { profile } = await requireToolRole(event, LEAVE_TOOL_ID, ['employee'])
 
-  // Every employee needs at least one linked manager, or nobody could approve
-  // the request. (The owner is exempt - testing only.)
-  if (role !== 'owner' && (await getManagerIdsOf(LEAVE_TOOL_ID, profile.id)).length === 0) {
+  // Everyone who applies, the owner included, needs at least one linked manager,
+  // or nobody could approve the request (nobody can approve their own leave).
+  if ((await getManagerIdsOf(LEAVE_TOOL_ID, profile.id)).length === 0) {
     throw createError({
       statusCode: 409,
-      statusMessage: 'You have no approving manager yet. Ask the workspace owner to link you to a manager.'
+      statusMessage: profile.isOwner
+        ? 'You need an approving manager to apply for leave. Add one for yourself in Manage access.'
+        : 'You have no approving manager yet. Ask the workspace owner to link you to a manager.'
     })
   }
 
