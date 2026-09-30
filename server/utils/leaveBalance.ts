@@ -45,6 +45,11 @@ export function todayISO(now: Date = new Date()): ISODate {
 type Db = ReturnType<typeof useDb>
 export type LeaveTypeRow = typeof leaveTypes.$inferSelect
 
+/** A pending/approved application as loaded (keeps its id so one can be left out of a check). */
+export interface ContextApplication extends LeaveApplicationLike {
+  id: number
+}
+
 export interface LeaveContext {
   profile: LeaveProfileDates
   /** Active leave types only, in display order. */
@@ -52,7 +57,7 @@ export interface LeaveContext {
   tiers: Map<number, EntitlementTier[]>
   adjustments: Map<number, { cycleStartYear: number, days: number }[]>
   /** Pending and approved applications only (the ones that use up days). */
-  applications: Map<number, LeaveApplicationLike[]>
+  applications: Map<number, ContextApplication[]>
 }
 
 function pushTo<T>(map: Map<number, T[]>, key: number, value: T) {
@@ -112,6 +117,7 @@ export async function loadLeaveContext(db: Db, employeeId: string): Promise<Leav
     ))
   for (const a of applicationRows) {
     pushTo(ctx.applications, a.leaveTypeId, {
+      id: a.id,
       startDate: a.startDate,
       endDate: a.endDate,
       startHalfDay: a.startHalfDay,
@@ -124,7 +130,10 @@ export async function loadLeaveContext(db: Db, employeeId: string): Promise<Leav
 }
 
 /** Everything the pure balance functions need for one leave type (minus asOf). */
-export function balanceInputFor(ctx: LeaveContext, type: LeaveTypeRow): Omit<BalanceInput, 'asOf'> {
+export function balanceInputFor(
+  ctx: LeaveContext,
+  type: LeaveTypeRow
+): Omit<BalanceInput, 'asOf' | 'applications'> & { applications: ContextApplication[] } {
   return {
     cycleStartMonth: type.cycleStartMonth,
     hasBalance: type.hasBalance,

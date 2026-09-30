@@ -161,6 +161,40 @@ export function validateLeaveDates(range: LeaveDateRange): string | null {
 }
 
 /* ------------------------------------------------------------------ */
+/* Clashes and cancelling                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * First date on which `request` would push the person's leave past one full
+ * day, given their existing pending/approved leave of ANY type; null if none.
+ * Weights are added per date, so a morning half-day and an afternoon half-day
+ * on the same date are fine, but a half day on top of a full day is not.
+ */
+export function findLeaveConflict(existing: LeaveDateRange[], request: LeaveDateRange): ISODate | null {
+  const used = new Map<ISODate, number>()
+  for (const e of existing) {
+    for (const d of leaveDayWeights(e)) {
+      used.set(d.date, (used.get(d.date) ?? 0) + d.weight)
+    }
+  }
+  for (const d of leaveDayWeights(request)) {
+    if ((used.get(d.date) ?? 0) + d.weight > 1) return d.date
+  }
+  return null
+}
+
+/**
+ * Pending leave can always be cancelled; approved leave only until its start
+ * date (a start date of today counts as started). Rejected and already-
+ * cancelled applications cannot be cancelled.
+ */
+export function canCancelLeave(status: LeaveStatus, startDate: ISODate, today: ISODate): boolean {
+  if (status === 'pending') return true
+  if (status === 'approved') return startDate > today
+  return false
+}
+
+/* ------------------------------------------------------------------ */
 /* Cycles                                                              */
 /* ------------------------------------------------------------------ */
 

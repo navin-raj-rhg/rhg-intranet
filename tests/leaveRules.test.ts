@@ -8,7 +8,9 @@ import {
   entitlementForYears,
   checkDateRestriction,
   computeLeaveBalance,
-  checkRequestAgainstBalance
+  checkRequestAgainstBalance,
+  findLeaveConflict,
+  canCancelLeave
 } from '../shared/utils/leaveRules.ts'
 
 const r = (startDate: string, endDate: string, startHalfDay = false, endHalfDay = false) => ({
@@ -197,4 +199,26 @@ test('request check: existing pending days reduce what is left', () => {
   )
   assert.equal(c[0]!.remainingBefore, 4)
   assert.equal(c[0]!.exceeds, true)
+})
+
+/* ---- clashes and cancelling ---- */
+test('clash detection across any leave, with half days', () => {
+  const week = [r('2026-10-05', '2026-10-09')] // Mon-Fri
+  assert.equal(findLeaveConflict(week, r('2026-10-08', '2026-10-12')), '2026-10-08')
+  assert.equal(findLeaveConflict(week, r('2026-10-10', '2026-10-11')), null) // weekend only
+  assert.equal(findLeaveConflict(week, r('2026-10-12', '2026-10-13')), null) // next week
+  assert.equal(findLeaveConflict(week, r('2026-10-09', '2026-10-09', true)), '2026-10-09') // half on a full day
+  const half = [r('2026-10-09', '2026-10-09', true)] // 0.5 on Fri
+  assert.equal(findLeaveConflict(half, r('2026-10-09', '2026-10-12', false, false)), '2026-10-09') // full over half
+  assert.equal(findLeaveConflict(half, r('2026-10-05', '2026-10-09', false, true)), null) // Mon-Fri, Fri morning half only
+  assert.equal(findLeaveConflict([], r('2026-10-05', '2026-10-09')), null)
+})
+
+test('who can cancel and when', () => {
+  assert.equal(canCancelLeave('pending', '2026-01-01', '2026-10-01'), true) // even if the date has passed
+  assert.equal(canCancelLeave('approved', '2026-10-02', '2026-10-01'), true)
+  assert.equal(canCancelLeave('approved', '2026-10-01', '2026-10-01'), false) // starts today = started
+  assert.equal(canCancelLeave('approved', '2026-09-30', '2026-10-01'), false)
+  assert.equal(canCancelLeave('rejected', '2026-12-01', '2026-10-01'), false)
+  assert.equal(canCancelLeave('cancelled', '2026-12-01', '2026-10-01'), false)
 })
