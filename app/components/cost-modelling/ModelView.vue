@@ -1,14 +1,36 @@
 <script setup lang="ts">
 import type { CostModelDetail } from '~~/shared/types/costModelling'
 
-/** One saved cost model, read-only (Step 11.8a). Duplicate / Delete come in 11.8c. */
+/** One saved cost model, read-only (Step 11.8a), with Duplicate and admin Delete (11.8c). */
 const props = defineProps<{ modelId: number }>()
-const emit = defineEmits<{ back: [], open: [id: number] }>()
+const emit = defineEmits<{ back: [], open: [id: number], duplicate: [id: number], deleted: [] }>()
+
+const toast = useToast()
 
 const { data: model, pending, error } = await useAsyncData(
   `cost-model-${props.modelId}`,
   () => useApiFetch<CostModelDetail>(`/api/tools/cost-modelling/models/${props.modelId}`)
 )
+
+/* --- Delete (admins and the owner; the API checks too) --- */
+const confirmOpen = ref(false)
+const deleting = ref(false)
+
+async function deleteModel() {
+  if (!model.value) return
+  deleting.value = true
+  try {
+    await useApiFetch(`/api/tools/cost-modelling/models/${model.value.id}`, { method: 'DELETE' })
+    toast.add({ title: 'Cost model deleted', description: model.value.name, color: 'success' })
+    confirmOpen.value = false
+    await refreshNuxtData('cost-models-list')
+    emit('deleted')
+  } catch (err) {
+    toast.add({ title: 'Could not delete', description: errorText(err), color: 'error' })
+  } finally {
+    deleting.value = false
+  }
+}
 
 const ports = computed(() => model.value?.factorsSnapshot.destinations.map(d => d.port) ?? [])
 
@@ -47,23 +69,73 @@ const savedText = computed(() => {
     </p>
 
     <template v-else-if="model">
-      <div>
-        <h2 class="text-xl font-semibold text-highlighted">
-          {{ model.name }}
-        </h2>
-        <p class="mt-1 text-sm text-muted">
-          {{ savedText }}
-          <template v-if="model.duplicatedFrom">
-            · copied from
-            <ULink
-              class="text-primary hover:underline"
-              @click="emit('open', model.duplicatedFrom.id)"
-            >
-              {{ model.duplicatedFrom.name }}
-            </ULink>
-          </template>
-        </p>
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-0">
+          <h2 class="text-xl font-semibold text-highlighted">
+            {{ model.name }}
+          </h2>
+          <p class="mt-1 text-sm text-muted">
+            {{ savedText }}
+            <template v-if="model.duplicatedFrom">
+              · copied from
+              <ULink
+                class="text-primary hover:underline"
+                @click="emit('open', model.duplicatedFrom.id)"
+              >
+                {{ model.duplicatedFrom.name }}
+              </ULink>
+            </template>
+          </p>
+        </div>
+        <div class="flex gap-2">
+          <UButton
+            icon="i-lucide-copy"
+            label="Duplicate"
+            color="neutral"
+            variant="outline"
+            @click="emit('duplicate', model.id)"
+          />
+          <UButton
+            v-if="model.canDelete"
+            icon="i-lucide-trash-2"
+            label="Delete"
+            color="error"
+            variant="outline"
+            @click="confirmOpen = true"
+          />
+        </div>
       </div>
+
+      <UModal
+        v-model:open="confirmOpen"
+        title="Delete this cost model?"
+        :description="model.name"
+      >
+        <template #body>
+          <p class="text-sm">
+            This permanently deletes the model and its {{ model.rows.length }} product{{ model.rows.length === 1 ? '' : 's' }}.
+            Copies made from it are kept. This can't be undone.
+          </p>
+        </template>
+        <template #footer>
+          <div class="flex w-full justify-end gap-2">
+            <UButton
+              label="Keep it"
+              color="neutral"
+              variant="outline"
+              :disabled="deleting"
+              @click="confirmOpen = false"
+            />
+            <UButton
+              label="Delete cost model"
+              color="error"
+              icon="i-lucide-trash-2"
+              :loading="deleting"
+              @click="deleteModel"
+            />
+          </div>
+        </template>
+      </UModal>
 
       <div class="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3 lg:grid-cols-5">
         <div>

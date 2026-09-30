@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CostFactorsResponse, SaveCostModelBody } from '~~/shared/types/costModelling'
+import type { CostFactorsResponse, CostModelDetail, SaveCostModelBody } from '~~/shared/types/costModelling'
 import type { CostCategory } from '~~/shared/utils/costCategories'
 import type { ContainerSize, CostRowResult, PackLevelKey } from '~~/shared/utils/costModel'
 import type { CostFormRow, FormPackLevel } from '~~/shared/utils/costModelForm'
@@ -9,7 +9,11 @@ import type { CostFormRow, FormPackLevel } from '~~/shared/utils/costModelForm'
  * current Factors as you type, with the same shared maths the server uses on
  * Save, so what you see is exactly what gets saved.
  */
-const emit = defineEmits<{ saved: [id: number], cancel: [] }>()
+const props = defineProps<{
+  /** Duplicate (Step 11.8c): prefill from this saved model, costed with TODAY's Factors. */
+  fromId?: number | null
+}>()
+const emit = defineEmits<{ saved: [id: number], cancel: [], open: [id: number] }>()
 
 const toast = useToast()
 
@@ -47,9 +51,47 @@ function removeRow(i: number) {
   else rows.value.splice(i, 1)
 }
 
-// A new category means the old sub-category no longer applies.
-watch(categoryId, () => {
-  subCategoryId.value = undefined
+// Changing the category means the old sub-category no longer applies
+// (but not when a category is first set, e.g. while prefilling a duplicate).
+watch(categoryId, (_now, before) => {
+  if (before !== undefined) subCategoryId.value = undefined
+})
+
+/* ------------------------------------------------------------------ */
+/* Duplicate: prefill from a saved model                               */
+/* ------------------------------------------------------------------ */
+
+const { data: source, error: sourceError } = await useAsyncData(
+  `cost-model-source-${props.fromId ?? 'none'}`,
+  () => (props.fromId
+    ? useApiFetch<CostModelDetail>(`/api/tools/cost-modelling/models/${props.fromId}`)
+    : Promise.resolve(null))
+)
+
+if (source.value) {
+  const m = source.value
+  supplierName.value = m.supplierName
+  // Only reuse the port / category if they still exist.
+  if (factors.value?.origins.some(o => o.id === m.originPortId)) originPortId.value = m.originPortId
+  const cat = categories.value?.find(c => c.id === m.categoryId)
+  if (cat) {
+    categoryId.value = cat.id
+    if (m.subCategoryId && cat.subCategories.some(s => s.id === m.subCategoryId)) subCategoryId.value = m.subCategoryId
+  }
+  containerBasis.value = m.containerBasis
+  notes.value = m.notes ?? ''
+  rows.value = m.rows.length ? m.rows.map(r => costFormRowFromSaved(nextKey++, r)) : [emptyCostFormRow(nextKey++)]
+}
+
+/** Exchange-rate changes since the original was saved, e.g. "USD 1.5 → 1.6". */
+const rateChanges = computed(() => {
+  const was = source.value?.factorsSnapshot
+  const now = factors.value?.settings
+  if (!was || !now) return ''
+  return [
+    was.usdToAud !== now.usdToAud ? `USD ${was.usdToAud} → ${now.usdToAud}` : '',
+    was.cnyToAud !== now.cnyToAud ? `CNY ${was.cnyToAud} → ${now.cnyToAud}` : ''
+  ].filter(Boolean).join(', ')
 })
 
 /* ------------------------------------------------------------------ */
@@ -145,6 +187,7 @@ async function save() {
       containerBasis: containerBasis.value,
       notes: notes.value.trim() || null,
       factorsUpdatedAt: factors.value.settings.updatedAt,
+      duplicatedFromId: source.value?.id ?? null,
       rows: costFormRowsForSave(rows.value)
     }
     const { id, name } = await useApiFetch<{ id: number, name: string }>('/api/tools/cost-modelling/models', { method: 'POST', body })
@@ -206,8 +249,37 @@ const inputUi = { base: 'px-1.5 text-right tabular-nums' }
     />
 
     <h2 class="text-xl font-semibold text-highlighted">
-      New cost model
+      {{ source ? 'Duplicate cost model' : 'New cost model' }}
     </h2>
+
+    <UAlert
+      v-if="fromId && sourceError"
+      color="error"
+      variant="subtle"
+      title="Couldn't load the model to copy"
+      :description="errorText(sourceError)"
+    />
+    <UAlert
+      v-else-if="source"
+      color="info"
+      variant="subtle"
+      icon="i-lucide-copy"
+      title="Copying a saved model"
+      data-testid="duplicate-note"
+    >
+      <template #description>
+        Copied from
+        <ULink
+          class="font-medium underline"
+          @click="emit('open', source.id)"
+        >
+          {{ source.name }}
+        </ULink>.
+        The figures below use <strong>today's Factors</strong><template v-if="rateChanges">
+          (exchange rate changed: {{ rateChanges }})
+        </template>. Change what you need and save - this makes a new model; the original stays as it is.
+      </template>
+    </UAlert>
 
     <UAlert
       v-if="factors?.notReadyReason"
