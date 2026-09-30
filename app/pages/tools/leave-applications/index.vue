@@ -32,7 +32,11 @@ const tabItems = computed(() => {
   return items
 })
 
-const tab = ref<TabValue>(tabItems.value[0]!.value)
+// ?tab=calendar opens straight on a tab (the dashboard's "Away today" tile
+// uses it); anything else falls back to the first tab.
+const route = useRoute()
+const requestedTab = tabItems.value.find(item => item.value === route.query.tab)
+const tab = ref<TabValue>((requestedTab ?? tabItems.value[0]!).value)
 </script>
 
 <template>

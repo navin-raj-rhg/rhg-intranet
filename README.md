@@ -1,8 +1,15 @@
 # RHG Intranet
 
-Internal portal scaffold: Nuxt 4 + TypeScript + Nuxt UI 4 + Pinia + Drizzle ORM
-(Supabase Postgres) + Cloudflare R2. This is the Step 2 scaffold — auth, real
-schema, and tools come in later steps.
+Internal company portal: Nuxt 4 + TypeScript + Nuxt UI 4 + Pinia + Drizzle ORM
+(Supabase Postgres) + Cloudflare R2, deployed on Railway. A dashboard plus a
+launcher for internal tools. Built so far: Expense Claims (Step 7) and Leave
+Applications (Step 10). The sections below are written step by step; the
+"What's here so far" list and the Step 2 to 5 wording describe the state at
+that step, so later step sections win where they differ. The project status
+document (kept in the Claude project) has the current overview and roadmap.
+
+Useful commands: `pnpm dev`, `pnpm lint`, `pnpm typecheck`, `pnpm test`
+(unit tests, no database needed), `pnpm db:generate`, `pnpm db:migrate`.
 
 ## Setup
 
@@ -509,3 +516,133 @@ that team's claims, other teams' reports return 404, an employee with two
 managers can be approved by either, a stale second approval is refused, and
 removing a manager who others depend on is blocked.
 
+
+## Step 10: Leave Applications
+
+The second full tool, and the first to reuse the Step 9 pieces (`ToolAccessAdmin`,
+`toolTeams`, employee/manager links). An employee applies for leave, a linked
+manager approves or rejects it, and everyone can see who is away on a team
+calendar. Built in sub-steps 10.1 to 10.13 (10.13 = the dashboard "Away today" tile).
+
+### Roles and workflow
+
+- **Roles** (tool: `leave-applications`): `employee` and `manager`; the owner
+  bypasses as everywhere. The owner can apply too, but needs a linked manager
+  like anyone else, and **nobody can approve their own leave** (the owner
+  included).
+- **Status flow:** `pending` -> `approved` or `rejected` (by a linked manager,
+  or the owner). The applicant can cancel a pending application, or an approved
+  one that hasn't started. **Decisions are final** - there is no undo. A
+  rejection needs a note.
+- Approving/rejecting is race-guarded (`UPDATE ... WHERE status = 'pending'`),
+  so two managers can't both decide the same application.
+- An employee needs at least one linked manager before they can apply
+  (the page tells them if they don't have one).
+
+### Leave rules (all in `shared/utils/leaveRules.ts`, unit tested)
+
+- Only **Monday to Friday** count; weekends inside a range are free.
+  No public-holiday calendar yet (see limitations).
+- **Half days:** `startHalfDay` = the afternoon of the first day only,
+  `endHalfDay` = the morning of the last day only. A single-day half day uses
+  the start flag. Each half day counts as 0.5.
+- **Cycles:** each leave type has a `cycle_start_month` (1 = Jan-Dec, 7 = Jul-Jun).
+  A cycle is identified by the year it starts in. Balances are per cycle.
+- **Entitlements by service:** `leave_type_entitlements` holds tiers of
+  (`min_years_service`, `days`). An employee gets the highest tier they have
+  reached, by completed years since `profiles.join_date`.
+- **Balances are computed live** (entitlement + adjustments - approved - pending),
+  never stored. Going over balance shows a **warning but never blocks** the
+  application.
+- **Date restrictions** per leave type: `none`, `birth_month` or `join_month`
+  (the whole range must fall inside that month - used for Birthday and
+  Anniversary leave).
+- **Clashes:** you can't apply for dates that overlap your own pending or
+  approved leave.
+- A single application can't span more than a year (`validateLeaveDates`), and
+  must contain at least one working day. There is no rule against back-dated or
+  far-future applications (see limitations).
+- **Dates:** stored and sent as ISO `YYYY-MM-DD`; shown and typed as
+  **dd/mm/yyyy** (Malaysian, day first) via `shared/utils/dates.ts`
+  (`formatDateMY`, `formatDateRangeMY`, `parseDateMY`, `todayMY`). "Today" is
+  always the Asia/Kuala_Lumpur date, whatever the server's timezone.
+
+### How it fits together
+
+- **Schema** `server/db/schema/leave.ts`: `leave_types`, `leave_type_entitlements`,
+  `leave_applications`, `leave_balance_adjustments`. `profiles` gained
+  `date_of_birth` and `join_date` (`core.ts`). Migration `0003_daily_rage.sql`.
+- **Pure logic** (no DB, shared by server, forms and tests): `shared/utils/leaveRules.ts`,
+  `leaveForm.ts` (form parsing/validation), `leaveCalendar.ts` (month grid and
+  who-is-away), `dates.ts`.
+- **Server helpers** `server/utils/`: `leaveBalance.ts` (balance maths from DB rows),
+  `leaveRequest.ts` (apply, list, decide, calendar query), `leaveAdmin.ts`
+  (profile dates, adjustments).
+- **API** under `server/api/tools/leave-applications/`: `my-role`, `balances`,
+  `applications` (list `?scope=mine|team`, create), `applications/preview`
+  (live day count, warnings and conflicts for the form), `applications/[id]`
+  (detail incl. attachment URL and balance impact), `[id]/cancel|approve|reject`,
+  and `calendar?from=&to=` (approved leave only: names and dates, **never the
+  leave type or reason**; open to every role on the tool, max 100 days).
+- **Owner-only admin API:** `server/api/admin/profiles/[userId]/dates.put.ts`
+  (set date of birth / join date), `server/api/admin/leave/adjustments`
+  (add/list balance adjustments, e.g. carry-overs), and
+  `server/api/admin/leave/employees/[userId]/balances.get.ts`.
+- **Pages:** `app/pages/tools/leave-applications/index.vue` (tabs: Team approvals /
+  My leave / Team calendar, depending on role; `?tab=calendar` opens a tab
+  directly) and `access.vue` (Manage access, plus each person's date of birth
+  and join date via `ProfileDates.vue`).
+- **Components** `app/components/leave-applications/`: `EmployeeView` (balances,
+  own applications, cancel), `ApplyDialog` (the application form with live day
+  count and warnings, optional attachment), `ManagerView` (inbox with attachments
+  and balance impact), `DecisionDialog` (approve/reject with a note),
+  `TeamCalendar` (month grid, half days, "+N more", phone layout),
+  `ProfileDates`.
+- **Dashboard tile** `app/components/dashboard/AwayToday.vue`: "Away today" on
+  the dashboard, shown only to people who can open Leave Applications.
+- **Attachments** (e.g. medical certificates) go to R2 under
+  `leave-applications/<yyyy>/<mm>/<uuid>-<name>`; the apply route only accepts
+  keys with that prefix, and only the applicant, their managers and the owner
+  can get a download link (checked by the tool, not the generic storage route).
+- **Tests** in `tests/` (`pnpm test`, 43 tests, run with Node's built-in test
+  runner - no database needed): leave rules, dates, form parsing, calendar logic.
+  Imports in shared code use `.ts` extensions so they run under Node directly.
+- Shared helper `app/utils/errorText.ts` shows the server's clean error message
+  (used by the leave screens; older Expense Claims screens still show raw errors).
+
+### One-time setup after applying this step
+
+1. `pnpm db:migrate` (creates the leave tables and the new profile columns).
+   Run locally - Railway does not migrate.
+2. Supabase SQL Editor: run `server/db/manual-sql/004_seed_leave_tool.sql`
+   (registers the tool, its two roles and the 11 leave types), then
+   `005_seed_leave_entitlements.sql` (the days per service tier). To change a
+   policy number later, edit it in 005 and run it again.
+3. Set each person's **join date** and **date of birth** in Manage access - the
+   entitlement tier, Anniversary and Birthday rules depend on them.
+4. Assign roles and managers in Manage access.
+
+Leave types: Annual, Medical/Personal, Unpaid (no balance), Anniversary, Birthday,
+Wellness Day, Marriage, Hospitalization, Compassionate, Maternity, Paternity.
+Adding a new type is a row in `leave_types` plus its rows in
+`leave_type_entitlements`; the screens pick it up automatically.
+
+### Known limitations (fine for the demo)
+
+- **No public-holiday calendar**: a public holiday inside a range counts as a
+  working day.
+- **Decisions are final** - no un-approve or un-reject.
+- **Orphaned uploads:** if an application fails after its file was uploaded (or
+  is cancelled), the R2 file stays. Harmless, same as Expense Claims receipts.
+- **No limit on how far back or ahead** an application's dates can be.
+- **The calendar is company-wide by design:** every role on the tool sees the
+  names and dates of all approved leave (never the type or reason).
+- Test leave applications, adjustments, uploads and fake accounts should be
+  cleared before the director demo.
+
+**Verified:** `pnpm lint`, `pnpm typecheck`, `pnpm test` and the production build
+pass. The rules and queries were tested against a local Postgres built from the
+real migrations, and the pages were driven in a real headless browser against a
+mocked API (including the phone layout). You tested each sub-step against the
+real Supabase, including the apply/approve/reject/cancel flows, balances, date
+restrictions and the calendar.

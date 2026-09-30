@@ -16,6 +16,10 @@ interface PendingUser {
 
 const isOwner = computed(() => !!authStore.profile?.isOwner)
 
+// The "Away today" tile needs access to Leave Applications (the launcher list
+// only contains tools this user can open).
+const canSeeLeave = (tools ?? []).some(t => t.id === 'leave-applications')
+
 const { data: pendingUsers, refresh: refreshPending } = await useAsyncData('pending-users', () =>
   isOwner.value
     ? useApiFetch<PendingUser[]>('/api/admin/pending-users').catch(() => [] as PendingUser[])
@@ -109,6 +113,8 @@ async function claimOwner() {
           Placeholder: company announcements will appear here.
         </p>
       </UCard>
+
+      <DashboardAwayToday v-if="canSeeLeave" />
 
       <UCard>
         <template #header>
