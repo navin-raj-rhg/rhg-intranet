@@ -36,3 +36,18 @@ export function parseDateMY(text: string): string | null {
   }
   return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 }
+
+/**
+ * Today's date in Malaysia (Asia/Kuala_Lumpur), as ISO 'YYYY-MM-DD'. The
+ * browser's own clock zone is deliberately ignored: "today" is the company's
+ * day, whatever timezone the person's computer is set to.
+ */
+export function todayMY(now: Date = new Date()): string {
+  // The 'en-CA' locale formats dates as YYYY-MM-DD.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kuala_Lumpur',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(now)
+}

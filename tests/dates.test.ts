@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { formatDateMY, formatDateRangeMY, parseDateMY } from '../shared/utils/dates.ts'
+import { formatDateMY, formatDateRangeMY, parseDateMY, todayMY } from '../shared/utils/dates.ts'
 
 test('dd/mm/yyyy display', () => {
   assert.equal(formatDateMY('2026-09-30'), '30/09/2026')
@@ -26,4 +26,10 @@ test('typed dates are read day-first', () => {
   assert.equal(parseDateMY('abc'), null)
   // whatever it accepts, formatting gives the same text back
   assert.equal(formatDateMY(parseDateMY('05/01/2027')!), '05/01/2027')
+})
+
+test('today is the Malaysian date whatever the machine clock says', () => {
+  assert.equal(todayMY(new Date('2026-12-31T15:59:00Z')), '2026-12-31') // 23:59 in KL
+  assert.equal(todayMY(new Date('2026-12-31T16:00:00Z')), '2027-01-01') // midnight in KL
+  assert.equal(todayMY(new Date('2026-06-30T20:00:00Z')), '2026-07-01')
 })

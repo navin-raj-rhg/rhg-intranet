@@ -20,21 +20,26 @@ const roles = computed(() => roleData.value?.roles ?? [])
 const canApplyForLeave = computed(() => roles.value.includes('employee') || roles.value.includes('owner'))
 const isManager = computed(() => roles.value.includes('manager') || roles.value.includes('owner'))
 
-const tab = ref<'manager' | 'employee'>(isManager.value ? 'manager' : 'employee')
-const tabItems = [
-  { label: 'Team approvals', value: 'manager' },
-  { label: 'My leave', value: 'employee' }
-]
+type TabValue = 'manager' | 'employee' | 'calendar'
 
-const showManagerView = computed(() => isManager.value && (!canApplyForLeave.value || tab.value === 'manager'))
-const showEmployeeView = computed(() => canApplyForLeave.value && (!isManager.value || tab.value === 'employee'))
+// Everyone sees the team calendar. Managers get the approvals tab, people who
+// can apply get "My leave". The first tab is whichever matters most to them.
+const tabItems = computed(() => {
+  const items: { label: string, value: TabValue }[] = []
+  if (isManager.value) items.push({ label: 'Team approvals', value: 'manager' })
+  if (canApplyForLeave.value) items.push({ label: 'My leave', value: 'employee' })
+  items.push({ label: 'Team calendar', value: 'calendar' })
+  return items
+})
+
+const tab = ref<TabValue>(tabItems.value[0]!.value)
 </script>
 
 <template>
   <UContainer class="py-10">
     <UPageHeader
       title="Leave Applications"
-      description="Apply for leave and check your balances. Managers approve their team's leave here."
+      description="Apply for leave, check your balances and see who is away. Managers approve their team's leave here."
     >
       <template
         v-if="authStore.profile?.isOwner"
@@ -76,18 +81,18 @@ const showEmployeeView = computed(() => canApplyForLeave.value && (!isManager.va
       />
 
       <UTabs
-        v-if="canApplyForLeave && isManager"
         v-model="tab"
         class="mt-6"
         :items="tabItems"
         :content="false"
       />
 
-      <LeaveApplicationsManagerView v-if="showManagerView" />
+      <LeaveApplicationsManagerView v-if="tab === 'manager'" />
       <LeaveApplicationsEmployeeView
-        v-if="showEmployeeView"
+        v-if="tab === 'employee'"
         :can-apply="!roleData?.missingManager"
       />
+      <LeaveApplicationsTeamCalendar v-if="tab === 'calendar'" />
     </template>
   </UContainer>
 </template>
