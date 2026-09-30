@@ -48,16 +48,8 @@ const tab = ref<TabValue>(route.query.tab === 'factors' ? 'factors' : 'model')
         :content="false"
       />
 
-      <UAlert
-        v-if="tab === 'model'"
-        class="mt-8"
-        color="neutral"
-        variant="subtle"
-        icon="i-lucide-hammer"
-        title="Cost Model tab coming next"
-        description="Creating, saving and searching cost models is built in Steps 11.6 to 11.8."
-      />
-      <!-- v-show, not v-if: switching tabs must not throw away unsaved Factors edits. -->
+      <!-- v-show, not v-if: switching tabs must not lose what's on the other tab. -->
+      <CostModellingModelsTab v-show="tab === 'model'" />
       <CostModellingFactorsView v-show="tab === 'factors'" />
     </template>
   </UContainer>
