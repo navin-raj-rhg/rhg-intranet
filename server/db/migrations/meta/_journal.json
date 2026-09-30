@@ -43,6 +43,13 @@
       "when": 1790784568570,
       "tag": "0005_keen_mauler",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790788996058,
+      "tag": "0006_harsh_proemial_gods",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,4 @@ export * from './core'
 export * from './expenseClaims'
 export * from './leave'
 export * from './costModelling'
-
-// Further tool-specific tables get added here as each tool is built, e.g:
-// export * from './inspections'
+export * from './inspections'
