@@ -29,6 +29,13 @@
       "when": 1790699590217,
       "tag": "0003_daily_rage",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790763704213,
+      "tag": "0004_flawless_silver_sable",
+      "breakpoints": true
     }
   ]
 }

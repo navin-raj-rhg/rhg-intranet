@@ -67,6 +67,18 @@ export interface CostFactors {
   destinations: DestinationCost[]
 }
 
+/**
+ * The copy of Factors stored with a saved model (cost_models.factors_snapshot),
+ * so the model shows exactly what it showed on the day it was saved.
+ */
+export interface CostFactorsSnapshot extends CostFactors {
+  originPort: { code: string, name: string }
+  /** Local-cost lines behind each destination's localAud total. */
+  localFees: { port: string, fee: string, aud: Record<ContainerSize, number> }[]
+  /** ISO timestamp the snapshot was taken. */
+  capturedAt: string
+}
+
 export interface DestinationCost {
   /** e.g. 'MEL'. */
   port: string
