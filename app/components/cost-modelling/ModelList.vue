@@ -27,6 +27,9 @@ const { data, pending, error } = await useAsyncData(
 )
 
 const savedOn = (iso: string) => formatDateMY(todayMY(new Date(iso)))
+
+/** "(2)" for a same-day copy, so otherwise-identical rows can be told apart. */
+const nameNumber = (name: string) => /\((\d+)\)$/.exec(name)?.[0] ?? ''
 </script>
 
 <template>
@@ -110,12 +113,15 @@ const savedOn = (iso: string) => formatDateMY(todayMY(new Date(iso)))
                   class="font-medium text-highlighted hover:underline"
                   @click.prevent.stop="emit('open', m.id)"
                 >
-                  {{ m.supplierName }}
-                </NuxtLink>
-                <p class="text-xs text-muted">
                   {{ m.categoryName }}<template v-if="m.subCategoryName">
                     › {{ m.subCategoryName }}
                   </template>
+                </NuxtLink>
+                <p class="text-xs text-muted">
+                  {{ m.supplierName }}<span
+                    v-if="nameNumber(m.name)"
+                    class="ml-1 text-dimmed"
+                  >{{ nameNumber(m.name) }}</span>
                   <span class="md:hidden"> · {{ m.originCode }} · {{ m.rowCount }} products</span>
                 </p>
               </td>

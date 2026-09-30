@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { CostMyRoleResponse } from '~~/shared/types/costModelling'
 
+const authStore = useAuthStore()
+
 const { pending, error } = await useAsyncData('cost-modelling-my-role', () =>
   useApiFetch<CostMyRoleResponse>('/api/tools/cost-modelling/my-role')
 )
@@ -22,7 +24,19 @@ const tab = ref<TabValue>(route.query.tab === 'factors' ? 'factors' : 'model')
     <UPageHeader
       title="Cost Modelling"
       description="Cost products from FOB price to landed cost in AUD, with container fill, shipping per unit and margins."
-    />
+    >
+      <template
+        v-if="authStore.profile?.isOwner"
+        #links
+      >
+        <UButton
+          to="/tools/cost-modelling/access"
+          icon="i-lucide-users"
+          variant="outline"
+          label="Manage access"
+        />
+      </template>
+    </UPageHeader>
 
     <UAlert
       v-if="error"
