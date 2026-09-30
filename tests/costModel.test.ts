@@ -209,3 +209,17 @@ test('display formats', () => {
   assert.equal(formatPercent(0.29), '29.0%')
   assert.equal(formatPercent(null), '—')
 })
+
+/* ---- rows on a saved model ---- */
+
+test('empty rows are ignored; a used row needs a product no. or description', async () => {
+  const { costRowHasContent, costModelRowProblems } = await import('../shared/utils/costModel.ts')
+  const blank = { ...row, carton: empty, fobPrice: null, toolingCost: null, dutyPercent: null, buyerBuyPrice: null, rrpIncGst: null, productNo: ' ', description: null }
+  assert.equal(costRowHasContent(blank), false)
+  assert.equal(costRowHasContent({ ...blank, fobCurrency: 'CNY' }), false) // currency alone doesn't count
+  assert.equal(costRowHasContent({ ...blank, fobPrice: 0 }), true) // 0 is still something typed
+
+  assert.deepEqual(costModelRowProblems([blank]), ['Add at least one product'])
+  assert.deepEqual(costModelRowProblems([{ ...row, productNo: 'CL-100', description: null }, blank]), [])
+  assert.deepEqual(costModelRowProblems([blank, { ...row, productNo: null, description: '' }]), ['Row 2: enter a product no. or description'])
+})

@@ -328,3 +328,35 @@ export function formatCbm(n: number | null): string {
   if (n === null || !Number.isFinite(n)) return '—'
   return n.toFixed(4)
 }
+
+/* ------------------------------------------------------------------ */
+/* Rows on a saved model                                               */
+/* ------------------------------------------------------------------ */
+
+export const COST_MODEL_MAX_ROWS = 200
+
+type LabelledRow = CostRowInput & { productNo?: string | null, description?: string | null }
+
+/** Anything typed in the row at all (currency on its own doesn't count). */
+export function costRowHasContent(row: LabelledRow): boolean {
+  const text = [row.productNo, row.description].some(t => (t ?? '').trim() !== '')
+  const levels = [row.carton, row.outer, row.pallet].some(packLevelUsed)
+  const numbers = [row.fobPrice, row.toolingCost, row.dutyPercent, row.buyerBuyPrice, row.rrpIncGst]
+    .some(v => v !== null && v !== undefined)
+  return text || levels || numbers
+}
+
+/** Problems that stop a model being saved ('' list = fine). Empty rows are ignored. */
+export function costModelRowProblems(rows: LabelledRow[]): string[] {
+  const problems: string[] = []
+  const used = rows.filter(costRowHasContent)
+  if (used.length === 0) problems.push('Add at least one product')
+  if (used.length > COST_MODEL_MAX_ROWS) problems.push(`A model can have at most ${COST_MODEL_MAX_ROWS} products`)
+  rows.forEach((row, i) => {
+    if (!costRowHasContent(row)) return
+    if ((row.productNo ?? '').trim() === '' && (row.description ?? '').trim() === '') {
+      problems.push(`Row ${i + 1}: enter a product no. or description`)
+    }
+  })
+  return problems
+}
