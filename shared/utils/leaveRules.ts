@@ -43,6 +43,11 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ]
 
+/** 1 = January ... 12 = December; '' for anything out of range. */
+export function monthName(month: number): string {
+  return MONTH_NAMES[month - 1] ?? ''
+}
+
 const DAY_MS = 86_400_000
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -316,12 +321,12 @@ export function checkDateRestriction(
 
   const start = parseISO(range.startDate)
   const end = parseISO(range.endDate)
-  const monthName = MONTH_NAMES[info.month - 1] ?? ''
+  const monthLabel = monthName(info.month)
   const label = restriction === 'birth_month' ? 'birth month' : 'work-anniversary month'
   const inside = !!start && !!end && start.y === end.y && start.m === info.month && end.m === info.month
   return inside
     ? { ok: true }
-    : { ok: false, reason: `This leave can only be taken in your ${label} (${monthName}), and the whole period must fall within it.` }
+    : { ok: false, reason: `This leave can only be taken in your ${label} (${monthLabel}), and the whole period must fall within it.` }
 }
 
 /* ------------------------------------------------------------------ */
