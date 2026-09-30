@@ -2,7 +2,7 @@
 import type { CostModelListResponse } from '~~/shared/types/costModelling'
 
 /** Saved cost models, newest first, with search and paging (Step 11.8a). */
-const emit = defineEmits<{ open: [id: number] }>()
+const emit = defineEmits<{ open: [id: number], new: [] }>()
 
 const search = ref('')
 const query = ref('') // what was actually searched (debounced)
@@ -39,13 +39,11 @@ const savedOn = (iso: string) => formatDateMY(todayMY(new Date(iso)))
         class="w-full sm:w-96"
         aria-label="Search cost models"
       />
-      <UTooltip text="Creating a new model is added in Step 11.8b">
-        <UButton
-          icon="i-lucide-plus"
-          label="New cost model"
-          disabled
-        />
-      </UTooltip>
+      <UButton
+        icon="i-lucide-plus"
+        label="New cost model"
+        @click="emit('new')"
+      />
     </div>
 
     <UAlert
@@ -68,7 +66,7 @@ const savedOn = (iso: string) => formatDateMY(todayMY(new Date(iso)))
           No cost models match "{{ query }}".
         </template>
         <template v-else>
-          No cost models have been saved yet.
+          No cost models have been saved yet. Use <strong>New cost model</strong> to create the first one.
         </template>
       </p>
 
