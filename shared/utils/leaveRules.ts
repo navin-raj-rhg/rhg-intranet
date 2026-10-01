@@ -17,6 +17,17 @@ export interface LeaveDateRange {
   startHalfDay: boolean
   /** Only the morning of endDate is taken (multi-day requests only). */
   endHalfDay: boolean
+  /**
+   * Public holidays (on working days) inside the range. They are skipped when
+   * counting, like weekends. A saved application keeps the ones that applied
+   * when it was made, so adding a holiday later never changes old leave.
+   */
+  holidays?: ISODate[]
+}
+
+export interface PublicHoliday {
+  date: ISODate
+  name: string
 }
 
 export interface LeaveCycle {
@@ -92,7 +103,7 @@ export function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate()
 }
 
-/** Monday to Friday. (Public holidays are not modelled in v1.) */
+/** Monday to Friday. Public holidays are skipped separately (LeaveDateRange.holidays). */
 export function isWorkingDay(iso: ISODate): boolean {
   const dow = new Date(toMs(iso)).getUTCDay() // 0 = Sun ... 6 = Sat
   return dow >= 1 && dow <= 5
@@ -114,10 +125,11 @@ export function leaveDayWeights(range: LeaveDateRange): { date: ISODate, weight:
   if ((endMs - startMs) / DAY_MS + 1 > MAX_LEAVE_SPAN_DAYS) return []
 
   const single = range.startDate === range.endDate
+  const holidays = range.holidays?.length ? new Set(range.holidays) : null
   const out: { date: ISODate, weight: number }[] = []
   for (let ms = startMs; ms <= endMs; ms += DAY_MS) {
     const date = fromMs(ms)
-    if (!isWorkingDay(date)) continue
+    if (!isWorkingDay(date) || holidays?.has(date)) continue
     let weight = 1
     if (date === range.startDate && range.startHalfDay) weight = 0.5
     else if (!single && date === range.endDate && range.endHalfDay) weight = 0.5
@@ -159,10 +171,34 @@ export function validateLeaveDates(range: LeaveDateRange): string | null {
   if (range.endHalfDay && !isWorkingDay(range.endDate)) {
     return 'The end date is a weekend, so it cannot be a half day.'
   }
+  if (range.startHalfDay && range.holidays?.includes(range.startDate)) {
+    return 'The start date is a public holiday, so it cannot be a half day.'
+  }
+  if (range.endHalfDay && range.holidays?.includes(range.endDate)) {
+    return 'The end date is a public holiday, so it cannot be a half day.'
+  }
   if (countLeaveDays(range) === 0) {
-    return 'The selected dates contain no working days.'
+    return 'The selected dates contain no working days (weekends and public holidays are skipped).'
   }
   return null
+}
+
+/**
+ * The public holidays that matter to a request: those inside the range that
+ * fall on a working day (one on a weekend changes nothing), in date order.
+ */
+export function holidaysOnWorkdays(startDate: ISODate, endDate: ISODate, all: PublicHoliday[]): PublicHoliday[] {
+  return all
+    .filter(h => h.date >= startDate && h.date <= endDate && isWorkingDay(h.date))
+    .sort((a, b) => a.date.localeCompare(b.date))
+}
+
+/** Plain-English problem with a holiday name, or '' if it is fine. */
+export function holidayNameProblem(raw: string): string {
+  const name = raw.replace(/\s+/g, ' ').trim()
+  if (!name) return 'Enter a name for the holiday.'
+  if (name.length > 80) return 'The holiday name must be 80 characters or fewer.'
+  return ''
 }
 
 /* ------------------------------------------------------------------ */

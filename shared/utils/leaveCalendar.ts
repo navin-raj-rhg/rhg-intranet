@@ -22,6 +22,8 @@ export interface CalendarRow {
   endDate: ISODate
   startHalfDay: boolean
   endHalfDay: boolean
+  /** Public holidays this leave skipped when it was applied for. */
+  holidays?: ISODate[]
 }
 
 export interface AwayPerson {

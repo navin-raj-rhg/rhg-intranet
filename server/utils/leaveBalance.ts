@@ -122,6 +122,7 @@ export async function loadLeaveContext(db: Db, employeeId: string): Promise<Leav
       endDate: a.endDate,
       startHalfDay: a.startHalfDay,
       endHalfDay: a.endHalfDay,
+      holidays: a.holidayDates,
       status: a.status
     })
   }

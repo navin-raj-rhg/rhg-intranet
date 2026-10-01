@@ -71,6 +71,13 @@
       "when": 1790854122989,
       "tag": "0009_dashing_hawkeye",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790855151077,
+      "tag": "0010_oval_mandarin",
+      "breakpoints": true
     }
   ]
 }

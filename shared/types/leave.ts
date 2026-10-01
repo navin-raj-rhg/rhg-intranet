@@ -48,7 +48,7 @@ export interface MyLeaveApplication {
 }
 
 export type LeavePreviewResponse
-  = | { ok: true, days: number, balanceChecks: CycleBalanceCheck[] }
+  = | { ok: true, days: number, balanceChecks: CycleBalanceCheck[], holidaysSkipped: { date: string, name: string }[] }
     | { ok: false, message: string }
 
 /** A row of the team list (scope=team): the same as one's own, plus who it belongs to. */

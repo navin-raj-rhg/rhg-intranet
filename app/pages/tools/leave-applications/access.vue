@@ -29,6 +29,7 @@ const authStore = useAuthStore()
 
     <template v-else>
       <ToolAccessAdmin tool-id="leave-applications" />
+      <LeaveApplicationsHolidays />
       <LeaveApplicationsProfileDates />
     </template>
   </UContainer>

@@ -309,6 +309,14 @@ async function submit() {
             {{ pluralDays(preview.days) }} of leave
           </p>
           <p
+            v-if="preview.holidaysSkipped.length"
+            class="text-muted"
+            data-testid="holidays-skipped"
+          >
+            Public {{ preview.holidaysSkipped.length === 1 ? 'holiday' : 'holidays' }} skipped:
+            {{ preview.holidaysSkipped.map(h => `${h.name} (${formatDateMY(h.date)})`).join(', ') }}
+          </p>
+          <p
             v-if="!preview.balanceChecks.length"
             class="text-muted"
           >

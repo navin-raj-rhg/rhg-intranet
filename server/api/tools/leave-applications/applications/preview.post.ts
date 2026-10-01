@@ -22,5 +22,5 @@ export default defineEventHandler(async (event) => {
   const result = await evaluateLeaveRequest(useDb(), profile.id, body)
   if (!result.ok) return { ok: false as const, message: result.message }
 
-  return { ok: true as const, days: result.days, balanceChecks: result.balanceChecks }
+  return { ok: true as const, days: result.days, balanceChecks: result.balanceChecks, holidaysSkipped: result.holidaysSkipped }
 })

@@ -58,6 +58,7 @@ export default defineEventHandler(async (event) => {
       startHalfDay: body.startHalfDay,
       endHalfDay: body.endHalfDay,
       days: result.days.toFixed(1),
+      holidayDates: result.holidaysSkipped.map(h => h.date),
       reason: body.reason || null,
       attachmentKey: body.attachmentKey ?? null
       // status defaults to 'pending'

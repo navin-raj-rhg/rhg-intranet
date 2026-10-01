@@ -7,6 +7,7 @@ import {
   loadLeaveContext,
   type LeaveTypeRow
 } from '~~/server/utils/leaveBalance'
+import { listPublicHolidays } from '~~/server/utils/leaveHolidays'
 import { formatDateMY } from '~~/shared/utils/dates'
 import {
   canCancelLeave,
@@ -14,10 +15,12 @@ import {
   checkRequestAgainstBalance,
   countLeaveDays,
   findLeaveConflict,
+  holidaysOnWorkdays,
   validateLeaveDates,
   type CycleBalanceCheck,
   type ISODate,
-  type LeaveStatus
+  type LeaveStatus,
+  type PublicHoliday
 } from '~~/shared/utils/leaveRules'
 
 /**
@@ -43,6 +46,8 @@ export type LeaveEvaluation
     ok: true
     type: LeaveTypeRow
     days: number
+    /** Public holidays inside the dates that are skipped (not counted as leave). */
+    holidaysSkipped: PublicHoliday[]
     /** One entry per leave cycle the request touches; `exceeds` = over balance (advisory only). */
     balanceChecks: CycleBalanceCheck[]
   }
@@ -66,11 +71,18 @@ export async function evaluateLeaveRequest(
   const type = ctx.types.find(t => t.id === input.leaveTypeId)
   if (!type) return fail(400, 'Unknown or inactive leave type.')
 
+  // Public holidays inside the dates are skipped like weekends (and kept on the application).
+  const holidaysSkipped = holidaysOnWorkdays(
+    input.startDate,
+    input.endDate,
+    await listPublicHolidays(db, { from: input.startDate, to: input.endDate })
+  )
   const range = {
     startDate: input.startDate,
     endDate: input.endDate,
     startHalfDay: input.startHalfDay,
-    endHalfDay: input.endHalfDay
+    endHalfDay: input.endHalfDay,
+    holidays: holidaysSkipped.map(h => h.date)
   }
 
   const dateError = validateLeaveDates(range)
@@ -88,6 +100,7 @@ export async function evaluateLeaveRequest(
     ok: true,
     type,
     days: countLeaveDays(range),
+    holidaysSkipped,
     balanceChecks: checkRequestAgainstBalance(balanceInputFor(ctx, type), range)
   }
 }
@@ -304,7 +317,8 @@ export async function listCalendarLeave(db: Db, opts: { from: ISODate, to: ISODa
       startDate: leaveApplications.startDate,
       endDate: leaveApplications.endDate,
       startHalfDay: leaveApplications.startHalfDay,
-      endHalfDay: leaveApplications.endHalfDay
+      endHalfDay: leaveApplications.endHalfDay,
+      holidays: leaveApplications.holidayDates
     })
     .from(leaveApplications)
     .leftJoin(profiles, eq(profiles.id, leaveApplications.employeeId))
@@ -321,6 +335,7 @@ export async function listCalendarLeave(db: Db, opts: { from: ISODate, to: ISODa
     startDate: r.startDate,
     endDate: r.endDate,
     startHalfDay: r.startHalfDay,
-    endHalfDay: r.endHalfDay
+    endHalfDay: r.endHalfDay,
+    holidays: r.holidays
   }))
 }

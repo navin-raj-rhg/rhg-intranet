@@ -21,6 +21,14 @@ const { data: rows, pending, error, refresh } = await useAsyncData(
 
 const away = computed(() => awayByDate(rows.value ?? []))
 
+// Public holidays in view, highlighted differently from leave.
+const { data: holidayRows } = await useAsyncData(
+  'leave-team-calendar-holidays',
+  () => useApiFetch<{ date: string, name: string }[]>('/api/tools/leave-applications/holidays', { query: range.value }),
+  { watch: [range] }
+)
+const holidayNames = computed(() => new Map((holidayRows.value ?? []).map(h => [h.date, h.name])))
+
 const MAX_NAMES = 3
 
 function peopleOn(date: string) {
@@ -128,6 +136,7 @@ const monthIsEmpty = computed(() =>
             class="min-h-16 border-l border-default p-1 text-left align-top first:border-l-0 sm:min-h-24 sm:p-1.5"
             :class="[
               day.isWeekend ? 'bg-elevated/50' : '',
+              holidayNames.has(day.date) ? 'bg-info/10' : '',
               day.inMonth ? 'cursor-pointer hover:bg-elevated' : 'cursor-default opacity-40',
               selected === day.date ? 'ring-2 ring-inset ring-primary' : ''
             ]"
@@ -138,6 +147,15 @@ const monthIsEmpty = computed(() =>
               :class="day.date === today ? 'bg-primary font-semibold text-inverted' : 'text-muted'"
             >
               {{ Number(day.date.slice(8)) }}
+            </span>
+
+            <span
+              v-if="day.inMonth && holidayNames.has(day.date)"
+              class="mt-1 block truncate rounded border border-info/40 px-1 text-xs text-info"
+              :title="holidayNames.get(day.date)"
+              data-testid="calendar-holiday"
+            >
+              {{ holidayNames.get(day.date) }}
             </span>
 
             <template v-if="day.inMonth && peopleOn(day.date).length">
@@ -203,10 +221,16 @@ const monthIsEmpty = computed(() =>
         </li>
       </ul>
       <p
-        v-else
+        v-if="holidayNames.has(selected)"
+        class="mb-2 text-sm text-info"
+      >
+        Public holiday: {{ holidayNames.get(selected) }}
+      </p>
+      <p
+        v-if="!selectedPeople.length"
         class="text-sm text-muted"
       >
-        {{ isWorkingDay(selected) ? 'Everyone is in.' : 'Weekend.' }}
+        {{ holidayNames.has(selected) ? 'Nobody is on leave.' : isWorkingDay(selected) ? 'Everyone is in.' : 'Weekend.' }}
       </p>
     </UCard>
   </div>

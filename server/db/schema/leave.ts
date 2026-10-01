@@ -114,6 +114,9 @@ export const leaveApplications = pgTable(
     reason: text('reason'),
     // R2 object key for an optional attachment (e.g. medical certificate).
     attachmentKey: text('attachment_key'),
+    // Public holidays (on working days) skipped when `days` was counted. Frozen at
+    // submit, so adding or removing a holiday later never changes old leave.
+    holidayDates: text('holiday_dates').array().notNull().default(sql`'{}'::text[]`),
     status: leaveApplicationStatus('status').notNull().default('pending'),
     decidedBy: uuid('decided_by').references(() => profiles.id),
     decidedAt: timestamp('decided_at', { withTimezone: true }),
@@ -139,6 +142,20 @@ export const leaveApplications = pgTable(
  * someone it doesn't apply to). Positive adds days, negative removes them.
  * `cycleStartYear` is the year the cycle begins in (see leave_types).
  */
+/**
+ * Public holidays (Step 13.8), one company-wide list kept by the owner. A
+ * holiday on a working day is skipped when leave days are counted. Leave that is
+ * already saved keeps its own copy of the holidays it skipped
+ * (leave_applications.holiday_dates), so editing this list never changes it.
+ */
+export const leavePublicHolidays = pgTable('leave_public_holidays', {
+  id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+  holidayDate: date('holiday_date').notNull().unique(),
+  name: text('name').notNull(),
+  createdBy: uuid('created_by').references(() => profiles.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+})
+
 export const leaveBalanceAdjustments = pgTable(
   'leave_balance_adjustments',
   {

@@ -13,6 +13,11 @@ const { data: rows, pending, error } = await useAsyncData('dashboard-away-today'
   useApiFetch<CalendarRow[]>('/api/tools/leave-applications/calendar', { query: { from: today, to: today } })
 )
 
+const { data: holidayRows } = await useAsyncData('dashboard-away-today-holiday', () =>
+  useApiFetch<{ date: string, name: string }[]>('/api/tools/leave-applications/holidays', { query: { from: today, to: today } })
+)
+const holidayToday = computed(() => holidayRows.value?.[0]?.name ?? null)
+
 const people = computed(() => awayByDate(rows.value ?? []).get(today) ?? [])
 </script>
 
@@ -42,6 +47,12 @@ const people = computed(() => awayByDate(rows.value ?? []).get(today) ?? [])
       class="text-sm text-muted"
     >
       It's the weekend.
+    </p>
+    <p
+      v-else-if="holidayToday"
+      class="text-sm text-info"
+    >
+      Public holiday: {{ holidayToday }}.
     </p>
     <p
       v-else-if="!people.length"

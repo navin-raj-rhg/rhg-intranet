@@ -11,7 +11,9 @@ import {
   checkRequestAgainstBalance,
   findLeaveConflict,
   canCancelLeave,
-  validateProfileDates
+  validateProfileDates,
+  holidaysOnWorkdays,
+  holidayNameProblem
 } from '../shared/utils/leaveRules.ts'
 
 const r = (startDate: string, endDate: string, startHalfDay = false, endHalfDay = false) => ({
@@ -237,4 +239,43 @@ test('owner-entered profile dates are sanity checked', () => {
   assert.match(check(null, '1850-01-01')!, /past/)
   assert.match(check('2062-01-01', null)!, /far in the future/) // typo of 2026
   assert.match(check('1985-01-01', '1990-08-01')!, /after the date of birth/) // swapped
+})
+
+/* ---- public holidays (Step 13.8) ---- */
+
+test('a public holiday on a working day is not counted as leave', () => {
+  // Mon 2026-08-31 to Fri 2026-09-04 is 5 working days; a Wednesday holiday makes it 4.
+  const base = { startDate: '2026-08-31', endDate: '2026-09-04', startHalfDay: false, endHalfDay: false }
+  assert.equal(countLeaveDays(base), 5)
+  assert.equal(countLeaveDays({ ...base, holidays: ['2026-09-02'] }), 4)
+})
+
+test('a holiday on a weekend changes nothing, and only holidays inside the dates matter', () => {
+  const all = [
+    { date: '2026-08-29', name: 'Saturday holiday' },
+    { date: '2026-09-02', name: 'Midweek holiday' },
+    { date: '2026-09-10', name: 'Outside the dates' }
+  ]
+  assert.deepEqual(holidaysOnWorkdays('2026-08-31', '2026-09-04', all), [{ date: '2026-09-02', name: 'Midweek holiday' }])
+})
+
+test('a request made only of holidays and weekends is refused', () => {
+  const r = { startDate: '2026-09-02', endDate: '2026-09-02', startHalfDay: false, endHalfDay: false, holidays: ['2026-09-02'] }
+  assert.match(validateLeaveDates(r)!, /no working days/)
+})
+
+test('a half day cannot be taken on a public holiday', () => {
+  const r = { startDate: '2026-09-02', endDate: '2026-09-03', startHalfDay: true, endHalfDay: false, holidays: ['2026-09-02'] }
+  assert.match(validateLeaveDates(r)!, /public holiday, so it cannot be a half day/)
+})
+
+test('leave saved before a holiday was added keeps its own count', () => {
+  const saved = { startDate: '2026-08-31', endDate: '2026-09-04', startHalfDay: false, endHalfDay: false, holidays: [] }
+  assert.equal(countLeaveDays(saved), 5)
+})
+
+test('holiday names are checked', () => {
+  assert.equal(holidayNameProblem('Merdeka Day'), '')
+  assert.match(holidayNameProblem('   '), /Enter a name/)
+  assert.match(holidayNameProblem('x'.repeat(81)), /80 characters/)
 })
