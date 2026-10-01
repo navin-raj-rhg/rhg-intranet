@@ -3,12 +3,12 @@ import { eq } from 'drizzle-orm'
 import { useDb } from '~~/server/db/client'
 import { expenseClaims } from '~~/server/db/schema'
 import { requireToolRole } from '~~/server/utils/requireToolRole'
+import { deleteIfUnreferenced } from '~~/server/utils/storageCleanup'
 
 const paramsSchema = z.object({ id: z.coerce.number().int().positive() })
 
-// Note: this deletes the DB row only, not the underlying R2 receipt object -
-// orphaned receipts are harmless (private bucket, unguessable key) and a
-// cleanup job can be added later if it ever matters.
+// Deletes the claim and, best effort, its receipt file (unless something else
+// still points to it). Anything missed is caught by the owner's storage clean-up.
 export default defineEventHandler(async (event) => {
   const { profile } = await requireToolRole(event, 'expense-claims', ['employee'])
   const { id } = await getValidatedRouterParams(event, paramsSchema.parse)
@@ -29,6 +29,7 @@ export default defineEventHandler(async (event) => {
   }
 
   await db.delete(expenseClaims).where(eq(expenseClaims.id, id))
+  await deleteIfUnreferenced(db, existing.receiptKey)
 
   return { success: true }
 })

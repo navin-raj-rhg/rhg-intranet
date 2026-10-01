@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 import { useDb } from '~~/server/db/client'
 import { expenseCategory, expenseClaims } from '~~/server/db/schema'
 import { requireToolRole } from '~~/server/utils/requireToolRole'
+import { deleteIfUnreferenced } from '~~/server/utils/storageCleanup'
 
 const paramsSchema = z.object({ id: z.coerce.number().int().positive() })
 
@@ -13,7 +14,7 @@ const bodySchema = z.object({
   expenseDate: z.string().date().optional(),
   // Lets an employee swap in a new receipt (re-upload via
   // POST /api/storage/upload-url first, then pass the new key here).
-  receiptKey: z.string().min(1).optional()
+  receiptKey: z.string().min(1).startsWith('expense-claims/', 'Invalid receipt.').optional()
 })
 
 export default defineEventHandler(async (event) => {
@@ -45,6 +46,11 @@ export default defineEventHandler(async (event) => {
     })
     .where(eq(expenseClaims.id, id))
     .returning()
+
+  // The old receipt is no longer used once it has been swapped for a new one.
+  if (body.receiptKey && body.receiptKey !== existing.receiptKey) {
+    await deleteIfUnreferenced(db, existing.receiptKey)
+  }
 
   return updated
 })

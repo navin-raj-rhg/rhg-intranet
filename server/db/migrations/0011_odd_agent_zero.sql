@@ -1,0 +1,1 @@
+ALTER TABLE "inspection_reports" DROP COLUMN "product_no";

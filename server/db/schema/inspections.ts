@@ -77,8 +77,6 @@ export const inspectionReports = pgTable(
     locationName: text('location_name').notNull(),
     templateId: integer('template_id').references(() => inspectionTemplates.id, { onDelete: 'set null' }),
     templateName: text('template_name').notNull(),
-    // Superseded by inspection_report_products (migration 0007); no longer read or written.
-    productNo: text('product_no'),
     reference: text('reference'), // PO / reference, free text
     inspectionDate: date('inspection_date').notNull(),
     notes: text('notes'),

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { S3Client, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 let _r2: S3Client | null = null
@@ -118,4 +118,28 @@ export async function getObjectBuffer(key: string): Promise<Buffer> {
   const res = await useR2().send(new GetObjectCommand({ Bucket: r2Bucket(), Key: key }))
   if (!res.Body) throw new Error('Empty response from storage.')
   return Buffer.from(await res.Body.transformToByteArray())
+}
+
+/** Size and last-modified time (ms) of a stored object, or null if it isn't there. */
+export async function headObjectLastModified(key: string): Promise<{ size: number, lastModified: number } | null> {
+  try {
+    const res = await useR2().send(new HeadObjectCommand({ Bucket: r2Bucket(), Key: key }))
+    return { size: res.ContentLength ?? 0, lastModified: res.LastModified?.getTime() ?? Date.now() }
+  } catch (err) {
+    const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode
+    if (status === 404) return null
+    throw err
+  }
+}
+
+/** Every object under a key prefix, page by page. */
+export async function* listObjects(prefix: string): AsyncGenerator<{ key: string, size: number, lastModified: number }> {
+  let token: string | undefined
+  do {
+    const res = await useR2().send(new ListObjectsV2Command({ Bucket: r2Bucket(), Prefix: prefix, ContinuationToken: token }))
+    for (const o of res.Contents ?? []) {
+      if (o.Key) yield { key: o.Key, size: o.Size ?? 0, lastModified: o.LastModified?.getTime() ?? Date.now() }
+    }
+    token = res.IsTruncated ? res.NextContinuationToken : undefined
+  } while (token)
 }

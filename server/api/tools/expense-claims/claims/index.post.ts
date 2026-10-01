@@ -9,7 +9,7 @@ const bodySchema = z.object({
   amount: z.number().positive(),
   description: z.string().min(1),
   expenseDate: z.string().date(), // 'YYYY-MM-DD'
-  receiptKey: z.string().min(1) // from POST /api/storage/upload-url first
+  receiptKey: z.string().min(1).startsWith('expense-claims/', 'Invalid receipt.') // from POST /api/storage/upload-url first
 })
 
 // Only 'employee' role (or the owner, testing) can submit claims. Managers

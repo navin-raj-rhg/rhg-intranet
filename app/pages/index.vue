@@ -221,5 +221,22 @@ async function claimOwner() {
         </p>
       </UCard>
     </div>
+
+    <!-- Owner housekeeping -->
+    <div
+      v-if="isOwner"
+      class="mt-10"
+    >
+      <h2 class="text-lg font-semibold mb-4">
+        Owner
+      </h2>
+      <UButton
+        to="/admin/storage"
+        variant="outline"
+        color="neutral"
+        icon="i-lucide-hard-drive"
+        label="Storage clean-up"
+      />
+    </div>
   </UContainer>
 </template>
