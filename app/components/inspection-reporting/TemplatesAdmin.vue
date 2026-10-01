@@ -6,6 +6,23 @@ import type { InspectionTemplateListItem } from '~~/shared/types/inspection'
 const { data, error, pending } = await useAsyncData('inspection-templates-admin', () =>
   useApiFetch<InspectionTemplateListItem[]>('/api/tools/inspection-reporting/templates')
 )
+
+const toast = useToast()
+const duplicatingId = ref<number | null>(null)
+
+// A copy starts switched off, so the admin can edit it before inspectors see it.
+async function duplicate(t: InspectionTemplateListItem) {
+  duplicatingId.value = t.id
+  try {
+    const copy = await useApiFetch<{ id: number, name: string }>(`/api/tools/inspection-reporting/templates/${t.id}/duplicate`, { method: 'POST' })
+    toast.add({ title: `Created "${copy.name}"`, description: 'It is switched off until you switch it on.', color: 'success' })
+    await navigateTo(`/tools/inspection-reporting/templates/${copy.id}`)
+  } catch (err) {
+    toast.add({ title: 'Could not duplicate the template', description: errorText(err), color: 'error' })
+  } finally {
+    duplicatingId.value = null
+  }
+}
 </script>
 
 <template>
@@ -71,6 +88,16 @@ const { data, error, pending } = await useAsyncData('inspection-templates-admin'
             color="neutral"
             icon="i-lucide-pencil"
             label="Edit"
+          />
+          <UButton
+            size="sm"
+            variant="ghost"
+            color="neutral"
+            icon="i-lucide-copy"
+            label="Duplicate"
+            :loading="duplicatingId === t.id"
+            :data-testid="`duplicate-${t.id}`"
+            @click="duplicate(t)"
           />
         </li>
       </ul>

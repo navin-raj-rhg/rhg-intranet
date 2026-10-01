@@ -94,6 +94,15 @@ function isInspectionInspector(roles: string[]): boolean {
   return roles.includes('inspector') || roles.includes('owner')
 }
 
+/**
+ * A reviewer who started the report cannot close it or send it back - another
+ * reviewer must. The owner is exempt (so a one-reviewer company can still close
+ * its reports).
+ */
+export function isOwnReportReviewBlocked(roles: string[], isAuthor: boolean): boolean {
+  return isAuthor && isInspectionReviewer(roles) && !roles.includes('owner')
+}
+
 /** Only the person who started it (or an admin) edits a draft. */
 export function canEditInspection(status: InspectionStatus, roles: string[], isAuthor: boolean): boolean {
   if (status !== 'draft') return false
@@ -121,13 +130,26 @@ export function inspectionTransitionProblem(
     return canEditInspection('draft', roles, isAuthor) ? '' : 'Only the inspector who started this report can submit it for review'
   }
   if (from === 'in_review' && (to === 'closed' || to === 'draft')) {
-    return isInspectionReviewer(roles) ? '' : 'Only a reviewer can close a report or send it back'
+    if (!isInspectionReviewer(roles)) return 'Only a reviewer can close a report or send it back'
+    if (isOwnReportReviewBlocked(roles, isAuthor)) return 'You started this report, so another reviewer needs to close it or send it back'
+    return ''
   }
   if (from === 'closed') return 'A closed report can\'t be changed'
   return `A report can't go from ${INSPECTION_STATUS_LABELS[from]} to ${INSPECTION_STATUS_LABELS[to]}`
 }
 
 // ---- Templates -----------------------------------------------------------
+
+/** Name for a copy of a template: "Copy of X", or "Copy of X (2)" if that is taken (ignoring case). */
+export function copyTemplateName(name: string, taken: string[]): string {
+  const base = `Copy of ${name.replace(/\s+/g, ' ').trim()}`.slice(0, 70)
+  const lower = new Set(taken.map(t => t.toLowerCase()))
+  if (!lower.has(base.toLowerCase())) return base
+  for (let n = 2; ; n++) {
+    const candidate = `${base} (${n})`
+    if (!lower.has(candidate.toLowerCase())) return candidate
+  }
+}
 
 export interface InspectionTemplatePoint {
   text: string

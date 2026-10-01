@@ -337,7 +337,8 @@ export async function getInspectionReport(db: Db, id: number, userId: string, ro
       edit: canEditInspection(report.status, roles, isAuthor),
       review: report.status === 'in_review' && inspectionTransitionProblem('in_review', 'closed', roles, isAuthor) === '',
       delete: canDeleteInspection(report.status, roles, isAuthor)
-    }
+    },
+    reviewBlockedOwn: report.status === 'in_review' && isOwnReportReviewBlocked(roles, isAuthor)
   }
 }
 

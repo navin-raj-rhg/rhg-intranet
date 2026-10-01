@@ -13,6 +13,8 @@ import {
   inspectionSubmitProblems,
   inspectionTemplateProblems,
   inspectionTransitionProblem,
+  isOwnReportReviewBlocked,
+  copyTemplateName,
   tallyInspectionPoints,
   tidyInspectionProducts,
   type InspectionPointAnswer
@@ -150,4 +152,20 @@ test('products summary for lists', () => {
   assert.equal(inspectionProductsSummary([]), '')
   assert.equal(inspectionProductsSummary(['P-100']), 'P-100')
   assert.equal(inspectionProductsSummary(['P-100', 'P-200', 'P-300']), 'P-100 + 2 more')
+})
+
+test('a reviewer cannot close or send back a report they started, but the owner can', () => {
+  assert.match(inspectionTransitionProblem('in_review', 'closed', ['reviewer'], true), /another reviewer/)
+  assert.match(inspectionTransitionProblem('in_review', 'draft', ['inspector', 'reviewer'], true), /another reviewer/)
+  assert.equal(inspectionTransitionProblem('in_review', 'closed', ['reviewer'], false), '')
+  assert.equal(inspectionTransitionProblem('in_review', 'closed', ['owner'], true), '')
+  assert.equal(isOwnReportReviewBlocked(['reviewer'], true), true)
+  assert.equal(isOwnReportReviewBlocked(['owner'], true), false)
+  assert.equal(isOwnReportReviewBlocked(['inspector'], true), false)
+})
+
+test('a copied template is named Copy of X, with a number if taken', () => {
+  assert.equal(copyTemplateName('Fence Check', ['Fence Check']), 'Copy of Fence Check')
+  assert.equal(copyTemplateName('Fence Check', ['Fence Check', 'copy of fence check']), 'Copy of Fence Check (2)')
+  assert.equal(copyTemplateName('  Fence   Check ', ['Copy of Fence Check', 'Copy of Fence Check (2)']), 'Copy of Fence Check (3)')
 })

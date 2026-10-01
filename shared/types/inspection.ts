@@ -80,6 +80,8 @@ export interface InspectionReportView {
   points: InspectionPointView[]
   events: { id: number, action: string, actorName: string, comment: string | null, createdAt: string }[]
   can: { edit: boolean, review: boolean, delete: boolean }
+  /** In review and started by the viewer, who is a reviewer: another reviewer has to review it. */
+  reviewBlockedOwn: boolean
 }
 
 export interface InspectionTemplateListItem {

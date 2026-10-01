@@ -469,7 +469,7 @@ async function discard() {
       color="warning"
       variant="subtle"
       title="This report is in review"
-      :description="report.can.review ? 'Check the answers and photos, then close the report or send it back to the inspector.' : 'It can\'t be edited while it is being reviewed.'"
+      :description="report.can.review ? 'Check the answers and photos, then close the report or send it back to the inspector.' : report.reviewBlockedOwn ? 'You started this report, so another reviewer needs to close it or send it back.' : 'It can\'t be edited while it is being reviewed.'"
     />
     <UAlert
       v-else-if="report.status === 'closed'"
