@@ -92,3 +92,22 @@ export interface CostProductSuggestion {
   supplierName: string
   savedAt: string
 }
+
+/** GET /api/tools/cost-modelling/setup (admins; Step 13.6b) */
+export interface CostSetupResponse {
+  categories: {
+    id: number
+    name: string
+    modelCount: number
+    subCategories: { id: number, name: string, modelCount: number }[]
+  }[]
+  ports: {
+    id: number
+    kind: 'origin' | 'destination'
+    code: string
+    name: string
+    active: boolean
+    modelCount: number
+  }[]
+  feeTypes: { id: number, name: string, active: boolean }[]
+}

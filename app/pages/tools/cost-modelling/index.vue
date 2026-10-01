@@ -3,20 +3,31 @@ import type { CostMyRoleResponse } from '~~/shared/types/costModelling'
 
 const authStore = useAuthStore()
 
-const { pending, error } = await useAsyncData('cost-modelling-my-role', () =>
+const { data: myRole, pending, error } = await useAsyncData('cost-modelling-my-role', () =>
   useApiFetch<CostMyRoleResponse>('/api/tools/cost-modelling/my-role')
 )
 
-type TabValue = 'model' | 'factors'
+type TabValue = 'model' | 'factors' | 'setup'
 
-const tabItems: { label: string, value: TabValue }[] = [
-  { label: 'Cost Model', value: 'model' },
-  { label: 'Factors', value: 'factors' }
-]
+// Setup (categories, ports, charge lines) is for admins and the owner only.
+const isAdmin = computed(() => myRole.value?.isAdmin ?? false)
 
-// ?tab=factors opens straight on the Factors tab.
+const tabItems = computed(() => {
+  const items: { label: string, value: TabValue }[] = [
+    { label: 'Cost Model', value: 'model' },
+    { label: 'Factors', value: 'factors' }
+  ]
+  if (isAdmin.value) items.push({ label: 'Setup', value: 'setup' })
+  return items
+})
+
+// ?tab=factors (or setup, for admins) opens straight on that tab.
 const route = useRoute()
-const tab = ref<TabValue>(route.query.tab === 'factors' ? 'factors' : 'model')
+const tab = ref<TabValue>(
+  route.query.tab === 'factors'
+    ? 'factors'
+    : route.query.tab === 'setup' && isAdmin.value ? 'setup' : 'model'
+)
 </script>
 
 <template>
@@ -65,6 +76,7 @@ const tab = ref<TabValue>(route.query.tab === 'factors' ? 'factors' : 'model')
       <!-- v-show, not v-if: switching tabs must not lose what's on the other tab. -->
       <CostModellingModelsTab v-show="tab === 'model'" />
       <CostModellingFactorsView v-show="tab === 'factors'" />
+      <CostModellingSetupView v-if="isAdmin && tab === 'setup'" />
     </template>
   </UContainer>
 </template>
