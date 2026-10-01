@@ -1,4 +1,4 @@
-# RHG Intranet — Project Status (updated through Step 12)
+# RHG Intranet — Project Status (updated through Step 13)
 
 > **Where this lives:** `docs/project-status.md` in the repo is the source of
 > truth (Claude Code reads it via `CLAUDE.md`). Navin may also keep a copy in
@@ -15,7 +15,7 @@ live URL.
 **Numbering convention (use this when talking to Claude):** everything is a
 numbered **Step** (Step 1 ... Step 17 below), with sub-steps like 10.4. The
 **Phases** group the steps. Refer to work by step number, e.g. "let's do
-Step 13" or "back to 11.8b". Steps 1-12 are done; Steps 13+ are the agreed
+Step 14" or "back to 11.8b". Steps 1-13 are done; Steps 14+ are the agreed
 roadmap and have not been started.
 
 ## Live demo
@@ -112,7 +112,8 @@ The short version of these rules is in `CLAUDE.md` at the repo root.
 
 ## Tech Stack
 
-- **Frontend:** Nuxt 4 (TypeScript), Nuxt UI 4, Pinia. **Rendering mode is
+- **Frontend:** Nuxt 4 (TypeScript), Nuxt UI 4, Pinia. RHG colours and the blue
+  header live in `app/assets/css/main.css` (orange in light mode, blue in dark mode). **Rendering mode is
   `ssr: false`** (client-side rendered only; `/api/*` Nitro routes are
   unaffected). A raw API URL typed into the browser shows Nuxt's own "404"
   page even when the server actually returned 401 - the terminal/console shows
@@ -122,7 +123,7 @@ The short version of these rules is in `CLAUDE.md` at the repo root.
 - **File storage:** Cloudflare R2 (S3-compatible), accessed via presigned URLs
 - **PDF generation:** `pdfkit` (expense-claims payroll report; inspection reports)
 - **Tests:** `pnpm test` runs Node's built-in test runner over `tests/*.test.ts`
-  (pure logic only, no database) - **98 tests as of Step 12**.
+  (pure logic only, no database) - **124 tests as of Step 13**.
 - **Package manager:** pnpm
 - **Hosting:** Railway (Node server), auto-deploying from `main`
 
@@ -214,7 +215,7 @@ Malaysian **dd/mm/yyyy** (`formatDateMY`, `formatDateRangeMY`, `parseDateMY`
 in `shared/utils/dates.ts`; day-first, never month-first). "Today" is the
 Asia/Kuala_Lumpur date (`todayMY`, server-side `todayISO`), never the server's
 own timezone. **Reuse for every future date on screen** (Expense Claims
-still shows raw dates - a Step 13 cleanup item).
+now uses it too, since Step 13).
 
 **No Drizzle `relations()` config yet** - list/join queries needing more than
 one table use manual `.leftJoin()`. Worth adding `relations()` config if the
@@ -236,6 +237,7 @@ pattern spreads.
 | 10. Leave Applications | ✅ Done (10.1-10.13, all pushed) | Apply/approve/reject/cancel, live balances by policy, team calendar, "Away today" tile |
 | 11. Cost Modelling | ✅ Done (11.1-11.10, all pushed) | Factors (FX, CBM, freight, port local costs), saved cost models with frozen figures, landed cost per AU port, margins, duplicate, product look-up (see below) |
 | 12. Inspection Reporting | ✅ Done (12.1-12.12) | Product QC inspections at suppliers/DCs: admin-built templates, phone-first checklist with photos and Minor/Major non-conformances, calculated result, review and close, saved products, PDF (see below) |
+| 13. Styling and clean-ups | ✅ Done (13.2-13.13) | RHG look, loading bar and faster requests, manager approvals banner, deactivate user, leave public holidays, cost model PDF and Setup tab, storage clean-up, many small fixes (see below) |
 
 ### Step 11: Cost Modelling (complete)
 
@@ -372,7 +374,7 @@ answer), `inspection_photos`, `inspection_events` (history + reviewer comments),
 - **Reports delete their R2 photo files** (best effort) when a draft is discarded
   or a report deleted.
 - **Migrations that replace a column** keep the old column for one release
-  (zero-downtime): `inspection_reports.product_no` is no longer used.
+  (zero-downtime); `inspection_reports.product_no` was dropped in Step 13.
 
 **Known limitations (acceptable for the demo):**
 - **PDF text:** the built-in PDF fonts only cover Western characters - **Chinese
@@ -384,16 +386,97 @@ answer), `inspection_photos`, `inspection_events` (history + reviewer comments),
 - **Non-Conformance dialog is only Minor/Major**; no defect log, no corrective-action
   tracking, no notifications.
 - Suppliers/DCs and templates can only be **switched off**, never deleted or
-  merged; templates can't be duplicated.
-- A reviewer can close a report they started themselves (no separation of duties).
+  merged. (Templates can now be duplicated, and a reviewer can no longer close a report
+  they started - both done in Step 13; the owner is exempt from that rule.)
 - **Photo links expire after 15 minutes** (the page refreshes them when the tab is
   revisited); an upload that is started but never recorded leaves an unused file in R2.
 - **Role refusals** (inspector can't close, reviewer can't edit, ...) are covered by
   unit tests and server checks but were only exercised with the owner account by
   Claude; Navin's multi-account test (navince Inspector, dh@test.com Reviewer,
   pt@test.com Admin, navin@test.com none) is the end-to-end check.
-- `.claude/launch.json` (how the Claude app starts `pnpm dev` in its browser pane)
-  is untracked in git - commit it or delete it.
+- `.claude/launch.json` (how the Claude app starts `pnpm dev` in its browser pane) is
+  now tracked in git (committed in Step 13).
+
+### Step 13: Styling and clean-ups (complete)
+
+Sub-steps: 13.1 decisions, 13.2 Expense Claims clean-up, 13.3 Leave clean-up, 13.4
+loading indicator and speed-up, 13.5 manager approvals banner, 13.6a cost model PDF,
+13.6b Cost Modelling Setup tab, 13.7 deactivate user, 13.8 leave public holidays,
+13.9 inspection fixes, 13.10 storage clean-up and dropping `product_no`, 13.11 RHG
+look, 13.12 test-data clean-up, 13.13 docs. Committed and pushed sub-step by
+sub-step when Navin asked. The repo `README.md` has the technical write-up.
+
+**What it is:** no new tool - the accumulated small items plus the company look.
+
+**Decisions (Navin's):**
+- **Look:** light mode uses black / navy `14213D` / orange `FCA311` / grey `E5E5E5` /
+  white; dark mode uses `00072D` / `001C55` / `0A2472` / `0E6BA8` / `A6E1FA`. The blue
+  header carries the RHG logo (`public/rhg-logo.png`, blue background `006B96`).
+  Names in the header stay white. Status colours are darker in light mode and
+  brighter in dark mode so text stays readable.
+- **Expense Claims:** statuses in sentence case, a new category **Others**, dates as
+  dd/mm/yyyy, clean error text. **If the owner is also ticked as Employee, they get "My
+  claims"** like anyone else.
+- **Leave:** statuses in sentence case; dates use the browser date field (day, month,
+  year jump) including the owner's join date / date of birth screen.
+- **Manager banner:** managers and the owner see "Waiting for your approval" with
+  counts of expense claims and leave and buttons into each tool. A deactivated
+  employee's pending items still count. Own leave is never counted.
+- **Speed:** loading bar on every page change, spinner on the clicked tool tile, and
+  the server remembers a checked login for 60 seconds (accepting that a cancelled login
+  can work for up to a minute). An expired login signs out and goes to the login page.
+- **Cost Modelling:** **Save as PDF** on a saved model. A **Setup** tab for admins and
+  the owner: rename / merge / delete categories and sub-categories (delete only if unused),
+  add ports and local-cost charge lines (start at zero, filled in on Factors), switch
+  ports and charge lines off and on (never deleted). Saved models are never rewritten.
+- **Deactivate user:** owner-only, in Manage access, applies to every tool. The person is
+  refused everywhere and hidden from lists and manager pickers; history and pending
+  items stay; reactivation is one click. Refused for owners, for yourself, and while the
+  person still manages active employees. Navin may add one or two more owners later.
+- **Leave public holidays:** one company-wide national list the owner enters (starts
+  empty). A holiday on a working day is skipped when counting; leave already applied for
+  keeps its own copy of the holidays it skipped, so nothing old changes. Shown in blue on
+  the team calendar.
+- **Inspection:** a reviewer can't close or send back a report they started (the owner is
+  exempt); **Duplicate** on a template makes "Copy of ..." switched off.
+- **Storage:** deleting a claim or replacing a receipt deletes the old file when nothing
+  else uses it. The owner's **Storage clean-up** page (`/admin/storage`) lists unused R2 files
+  (over a day old, tool folders only) and deletes them after confirmation. The unused
+  `inspection_reports.product_no` column was dropped.
+- **PDF font:** skipped - Chinese text still prints as "?".
+- **Test data:** cleared by Navin in the Supabase SQL editor (Claude listed it and wrote
+  the statements, but the permission system blocked Claude from running mass deletes).
+  `navin@test.com` and `pt@test.com` were removed; `dh@test.com` stays as the demo
+  manager for the owner and `navince`. All inspection data, including the Temp Fence
+  template and the Honde / VIC DC suppliers, was deleted and must be rebuilt for real use.
+
+**New tables / columns:** `profiles.deactivated_at`, `leave_public_holidays`,
+`leave_applications.holiday_dates`; `inspection_reports.product_no` dropped; enum value
+`expense_category = 'others'`. Migrations `0008_green_wolverine.sql`,
+`0009_dashing_hawkeye.sql`, `0010_oval_mandarin.sql`, `0011_odd_agent_zero.sql`. No new
+manual SQL.
+
+**Patterns worth reusing:**
+- **Freeze what an old record used:** leave stores the holidays it skipped, cost models store
+  their Factors - changing a shared list never rewrites history.
+- **Never trust a stored file key when deleting:** `deleteIfUnreferenced` only deletes a
+  file in a tool's own folder that no record points to.
+- **Migration order for a dropped column:** push the code that stops using it, wait for the
+  deploy, then run the migration (the reverse of adding a column).
+- **Dev server on port 3000:** R2's CORS allows only that address and Railway, so
+  uploads from another port fail with "failed to fetch".
+- **Destructive SQL is run by Navin** in the Supabase SQL editor, from statements Claude
+  writes and he approves one by one.
+
+**Known limitations (acceptable for the demo):**
+- Extra owners can only be set in the database; there is no screen for it.
+- Deactivating blocks the person inside the app only (their Supabase login is untouched);
+  the Leave calendar still shows a deactivated person's approved leave.
+- Public holidays are one national list - no state holidays.
+- Storage clean-up works on the oldest 200 files per scan.
+- Chinese / non-Western PDF text prints as "?"; HEIC photos still aren't drawn in PDFs.
+- Claude could only check the login page and header in the browser pane (the screens need
+  a real login); Navin tested the rest, including every multi-account behaviour.
 
 ## Step 9 reference (still true)
 
@@ -430,17 +513,16 @@ README's Step 10 section.
 - **The new-sign-up alert is in-app only** - no email/push.
 - **Deleting an auth user who has claim/payroll/leave/cost-model history**
   removes their login but keeps their profile row (deliberate, so history isn't
-  lost); they still appear in Manage access. A proper "deactivate user" feature
-  would fix this.
+  lost). Use **Deactivate** in Manage access (Step 13) for people who leave: it blocks
+  them in the app and hides them from lists, but leaves their Supabase login alone.
+- **Extra owners** can only be set in the database (`profiles.is_owner`); no screen yet.
 - **The manager link is live, not a snapshot:** re-linking an employee moves
   their pending claims/leave to the new manager (old manager loses sight of them).
 - **Co-managers see each other's payroll reports**, including reports
   covering employees they don't share. Could be tightened.
-- **Older components (Expense Claims) show raw API errors**
-  (`[POST] "/api/...": 409 ...`); the Leave, Cost Modelling and admin screens
-  use the clean server message via `app/utils/errorText.ts`. Also, an
-  already-approved claim clicked again shows the generic "Only submitted claims
-  can be approved"; the friendlier wording only appears in a true simultaneous race.
+- **The server remembers a checked login for 60 seconds** (Step 13.4) so most requests
+  skip Supabase; a login cancelled in Supabase can therefore work for up to a minute.
+  An expired login now signs out and goes to the login page.
 - **Rendering is `ssr: false`** (Step 8) - deliberate fix. Re-enabling SSR
   would reintroduce the logged-out-server-render issue unless paired with
   `@supabase/ssr` cookie-based sessions first.
@@ -452,40 +534,33 @@ README's Step 10 section.
 - Registering a NEW tool (`tool_registry` + `tool_roles` rows) is still a
   manual SQL insert (see `server/db/manual-sql/002_...`, `004_...`, `006_...`),
   and each new tool needs its own `access.vue` page.
-- Deleting an expense claim doesn't delete its R2 receipt object.
+- R2 files: deleting a claim or replacing a receipt now deletes the old file, and the
+  owner's **Storage clean-up** page (`/admin/storage`) finds and deletes unused files.
 - No Microsoft SSO yet - planned before company-wide launch.
 - `NUXT_SUPABASE_DB_URL` (direct connection) is intentionally not set on
   Railway - migrations must be run manually from a local machine after any
-  schema change; a push alone does not apply them (latest: `0007`). **Order for a
-  release with a migration: run `pnpm db:migrate` first, then push** (the code needs
-  the new tables). Manual SQL in `server/db/manual-sql/` (001 new-user trigger, 002
+  schema change; a push alone does not apply them (latest: `0011`). **Order for a
+  release with a migration that ADDS something: run `pnpm db:migrate` first, then push**
+  (the code needs the new tables or columns). **When a migration DROPS something, push
+  first, wait for the deploy, then migrate** (as with `0011`). Manual SQL in `server/db/manual-sql/` (001 new-user trigger, 002
   expense-claims seed, 003 deleted-user trigger, 004 leave seed, 005 leave
   entitlements, 006 cost modelling seed, 007 inspection reporting seed) is run by
   hand in the Supabase SQL editor.
 
 ## Testing setup
 
-- Navin's owner account (`is_owner`, bypasses per-tool checks; in Leave he has
-  also been set up as an employee with a linked manager to test the flow) and a
-  second personal account (`navince`, employee; given Cost Modelling User in 11.9).
-- **Team-isolation test accounts (created via Supabase Authentication → Users →
-  Add user, Auto Confirm ticked, fake addresses):** `dh@test.com` (manager of
-  navince), `pt@test.com` (manager of `navin@test.com`), `navin@test.com`
-  (employee). These have claims/payroll reports (and possibly leave
-  applications) attached; **clear or ignore before the director demo**, noting
-  that deleting a user with history leaves their profile row (see limitations).
-- **Also clear before the demo:** test leave applications (several cancelled,
-  some pending/approved), any test leave adjustments, uploaded test
-  attachments, and **test cost models and categories** (e.g. "Test Supplier" /
-  category "TEST" from 11.8a, and anything else created while testing Step 11 -
-  see the clean-up SQL in the Step 11.10 hand-over).
-- **Also clear before the demo (Step 12 test data, all named "ZZ ..."):** inspection
-  reports made while testing (ZZ TEST Supplier; products ZZ-P-200, ZZ-P-300, ZZ-P-301,
-  ZZ-NEW-1 and the P-100 / ZZ-P-200 report products), templates "ZZ TEST Template" and
-  "ZZ TEST Builder Template", suppliers "ZZ TEST Supplier", "ZZ TEST Second Supplier",
-  "ZZ TEST Renamed" and DC "ZZ TEST DC", and their saved products. Navin's own reports
-  (Honde, Temp Fence Inspection Report) are real - do not delete those. Exact clean-up
-  statements were listed for Navin's approval at the end of Step 12.
+- Navin's owner account (`is_owner`, bypasses per-tool checks; also set up as an
+  employee with `dh@test.com` as his manager in Expense Claims and Leave) and a second
+  personal account (`navince`, employee; Cost Modelling User and Inspector/Reviewer).
+- **`dh@test.com` is kept as the demo manager** (manager of the owner and `navince` in
+  Expense Claims and Leave, Reviewer in Inspection Reporting). It was created via
+  Supabase Authentication -> Users -> Add user (Auto Confirm ticked, fake address).
+- **Test data was cleared in Step 13.12** (claims, payroll reports, leave and
+  adjustments, the test holiday, the Hose Hangers cost model and Hobart port, all
+  inspection data, `navin@test.com` and `pt@test.com`). Nothing is left to clear before a
+  demo except any new test data. **Inspection Reporting is empty**: build the real
+  template(s) and the supplier / DC list before using it. Destructive SQL is run by Navin
+  in the Supabase SQL editor from statements Claude writes.
 - Use a private window for the non-owner accounts.
 - **To call an API route authenticated from the browser console** (the address
   bar can't - no cookies): read the Supabase token from localStorage and send
@@ -545,34 +620,22 @@ maths in `shared/utils` with unit tests (Step 10/11 pattern).
 
 ### Phase 2 - Styling and cleanups
 
-- **Step 13 - Styling and cleanups.** Visual polish across the app, plus the
-  accumulated small items:
-  - Shared error-message helper used by all screens (Expense Claims still shows
-    `[POST] "/api/...": 409 ...`; `app/utils/errorText.ts` already exists).
-  - Show Expense Claims dates as dd/mm/yyyy with the shared date helpers.
-  - Friendlier "already approved" wording on the approve route.
-  - "Deactivate user" instead of relying on deleting users (fixes the ghost
-    profile left when a user with history is deleted).
-  - Decide whether to tighten co-manager report visibility.
-  - Delete orphaned R2 files (receipts, leave attachments) or add a cleanup job.
-  - Public-holiday calendar for leave (so holidays don't count as leave days).
-  - Add Drizzle `relations()` config if the manual `.leftJoin()` pattern keeps
-    spreading.
-  - **Cost Modelling:** the extra product-row columns and Factors Navin
-    flagged; admin screen to rename/merge/delete categories and add ports /
-    charge lines; optionally make ticking Admin also tick User; consider
-    per-shipment vs per-container local costs and container weight limits.
-  - **Inspection Reporting:** decide the **Non-Conformance dialog** contents and
-    whether to add defects / follow-up (corrective) actions; Chinese-capable PDF font
-    (text prints as "?" now) and HEIC / resized photos in the PDF; remove the unused
-    `inspection_reports.product_no` column (migration; kept one release for a safe
-    deploy); delete orphaned R2 photo files (abandoned uploads); optional per-template
-    pass/fail thresholds, per-product results, template duplicate, supplier/DC merge;
-    consider blocking a reviewer from closing their own report; confirm the role
-    refusals with Navin's multi-account test; commit or delete `.claude/launch.json`.
-  - Remove the fake test accounts and test claims/leave/reports/uploads/cost
-    models and inspection reports ("ZZ ...") before any demo.
-  - Streamline how a new tool is registered (currently a hand-run SQL seed).
+- **Step 13 - Styling and cleanups** ✅ done (see above).
+
+**Backlog carried forward from Step 13 (not scheduled; each gets a Step number when
+chosen):**
+- Cost Modelling: the extra product-row columns and Factors Navin flagged; per-shipment
+  vs per-container local costs and container weight limits; optionally make ticking
+  Admin also tick User.
+- Inspection Reporting: the **Non-Conformance dialog** contents and defects /
+  follow-up (corrective) actions; HEIC / resized photos in the PDF; optional
+  per-template pass/fail thresholds, per-product results, supplier/DC merge. (A
+  Chinese-capable PDF font was skipped by choice.)
+- Decide whether to tighten co-manager payroll-report visibility.
+- A screen to make or remove extra owners (Navin may want one or two more).
+- Add Drizzle `relations()` config if the manual `.leftJoin()` pattern keeps spreading.
+- Streamline how a new tool is registered (currently a hand-run SQL seed).
+- Leave: state public holidays (today one national list), if ever needed.
 
 ### Phase 3 - Launch hardening (before company-wide rollout)
 
@@ -582,8 +645,9 @@ maths in `shared/utils` with unit tests (Step 10/11 pattern).
   SSO, whose redirect/callback flow benefits from it. It also enables
   server-side route protection (no more app shell briefly sent to logged-out
   visitors) and is the prerequisite for ever turning `ssr: false` back off.
-  Note the blast radius: `useApiFetch`, `server/middleware/auth.ts`, the auth
-  store and the login flow all change - keep it a step of its own, and re-test
+  Note the blast radius: `useApiFetch` (which now also redirects an expired login to
+  /login), `server/middleware/auth.ts` (which now also remembers checked logins for 60
+  seconds), the auth store and the login flow all change - keep it a step of its own, and re-test
   every tool afterwards. Optional if server-side page protection turns out not
   to matter, but recommended.
 - **Step 15 - Sign-up restriction to company email addresses** (so strangers

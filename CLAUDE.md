@@ -8,8 +8,8 @@ check `git log --oneline -15` to see what has landed since it was last updated.
 ## What this is
 
 Internal company portal for RHG: a dashboard plus a launcher for internal tools
-(Expense Claims, Leave Applications, Cost Modelling built; Inspection Reporting
-next). A working demo for a business case to the directors, live at
+(Expense Claims, Leave Applications, Cost Modelling and Inspection Reporting
+built). A working demo for a business case to the directors, live at
 https://rhg-intranet-production.up.railway.app (auto-deploys from `main`).
 
 Stack: Nuxt 4 (TypeScript, `ssr: false`), Nuxt UI 4, Pinia, Drizzle ORM on
@@ -44,7 +44,7 @@ Before telling Navin the Step is complete, update both documents in the repo:
 1. **`docs/project-status.md`** - mark the Step done in the Progress table, add a
    short section with Navin's decisions and known limitations, update test
    counts, migrations and manual SQL lists, add any new clean-up items to
-   Step 13, and set the next Step. Keep the numbering consistent.
+   the Backlog in the Roadmap, and set the next Step. Keep the numbering consistent.
 2. **`README.md`** - add a "Step N: <name>" section in the same style as Steps
    10 and 11 (roles, rules, how it fits together, one-time setup, known
    limitations, how it was verified).

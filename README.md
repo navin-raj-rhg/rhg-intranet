@@ -950,3 +950,97 @@ unit tests and server checks, with Navin's multi-account test as the end-to-end
 check), the phone camera buttons on a real phone (the inputs are set to open the
 camera; Navin to confirm on the hosted site), and the reviewer buttons at phone
 width.
+
+## Step 13: Styling and clean-ups
+
+A housekeeping step: no new tool, but the small fixes, the leftovers from Steps
+7 to 12 and the RHG look. Built in sub-steps 13.2 to 13.13 with Claude Code,
+committing and pushing sub-step by sub-step when Navin asked.
+
+### What changed, by sub-step
+
+- **13.2 Expense Claims:** status shown as "Submitted / Approved / Paid"; a new
+  category **Others**; dates as dd/mm/yyyy (lists and the payroll PDF); clean server
+  messages on screen; "This claim has already been approved" wording.
+- **13.3 Leave:** statuses in sentence case; Start / End date and the owner's
+  join date / date of birth use the browser's date field (it moves day, then month,
+  then year by itself), like Expense Claims.
+- **13.4 Speed:** a thin loading bar across the top while a page opens, and a
+  spinning icon on the tool tile that was clicked. The server also remembers a
+  checked login for 60 seconds (`shared/utils/tokenCache.ts`,
+  `server/middleware/auth.ts`) so most requests skip the round trip to Supabase.
+- **13.5 Approvals banner:** managers (and the owner) see "Waiting for your
+  approval" on the dashboard with the number of expense claims and leave
+  applications and a button into each tool (`GET /api/dashboard/pending-approvals`).
+  Nobody is asked to approve their own leave, so that is never counted.
+- **13.6a Cost model PDF:** a **Save as PDF** button on a saved model
+  (`server/utils/generateCostModelPdf.ts`, `GET .../models/[id]/pdf`): header,
+  Factors used, one row per product, landed cost per AU port, tooling, warnings. It
+  uses the figures saved with the model.
+- **13.6b Cost Modelling Setup tab (admins and owner):** rename, merge and delete
+  categories and sub-categories (delete only when no model uses them); add ports
+  (a new port starts with zero freight and local costs); add local-cost charge
+  lines; switch ports and charge lines off and on (never deleted). Saved models are
+  never rewritten. Code in `server/utils/costSetup.ts`, `shared/utils/costSetup.ts`.
+- **13.7 Deactivate user:** the owner's **Deactivate / Reactivate** button in
+  Manage access (`PUT /api/admin/profiles/[userId]/active`). A deactivated person is
+  refused by every route (`requireProfile`) and sees a "deactivated" page. They are
+  hidden from people lists and manager pickers; their history and pending items stay.
+  Refused for owners and while the person still manages active employees
+  (`shared/utils/deactivation.ts`). Migration `0009`: `profiles.deactivated_at`.
+- **13.8 Leave public holidays:** an owner-managed list on the Leave Manage access
+  page. A holiday on a working day is skipped when days are counted; the apply form
+  names the holidays skipped; the team calendar shows them in blue and "Away today"
+  mentions one. Each application keeps its own copy of the holidays it skipped
+  (`leave_applications.holiday_dates`), so changing the list never changes old leave.
+  Migration `0010`. Starts empty: the owner enters the dates.
+- **13.9 Inspection:** a reviewer can't close or send back a report they started
+  (the owner can); **Duplicate** on the template list makes "Copy of ..." (switched off).
+- **13.10 Storage:** deleting a claim or replacing its receipt now deletes the old
+  file when nothing else uses it. The owner's **Storage clean-up** page (`/admin/storage`,
+  linked from the dashboard) lists files in R2 that no record points to (over a day
+  old, in a tool's own folder) and deletes them after confirmation. Migration `0011`
+  drops the unused `inspection_reports.product_no`.
+- **13.11 Look:** RHG colours (orange in light mode, blue in dark mode, set once in
+  `app/assets/css/main.css`), the blue header with the logo (`public/rhg-logo.png`)
+  and a branded login page. A login that has expired now signs out and goes to the
+  login page instead of an error (`app/composables/useApiFetch.ts`).
+- **13.12 Test data:** the test claims, leave, adjustments, holiday, cost model,
+  Hobart port, inspection data and two of the three `@test.com` accounts were
+  deleted by Navin in the Supabase SQL editor. Claude listed the data first and
+  wrote the statements; the permission system blocked Claude from running the
+  deletes itself, so Navin ran them.
+- **Owner + Employee in Expense Claims:** if the owner is also ticked as Employee,
+  the page now offers "My claims" like it does for anyone else.
+
+### One-time setup after applying this step
+
+1. `pnpm db:migrate` for `0008` to `0011` (already run). `0011` drops a column, so it
+   was run **after** the code that stopped using it was deployed.
+2. No new manual SQL.
+3. The local dev server must run on **port 3000**: R2's CORS only allows that address
+   (and Railway), so receipt uploads from another port fail with "failed to fetch".
+
+### Known limitations (fine for the demo)
+
+- **Extra owners** can only be set in the database (`profiles.is_owner`); there is no
+  screen for it yet. Nothing assumes a single owner.
+- **Deactivating** blocks the person inside the app only; their Supabase login is
+  untouched. The Leave calendar still shows a deactivated person's approved leave.
+- **Public holidays** are one national list; there are no state holidays.
+- **Remembered logins:** a login cancelled in Supabase can keep working for up to a minute.
+- **Storage clean-up** shows and deletes the oldest 200 files per scan (scan again for more).
+- **Chinese / non-Western text** still prints as "?" in PDFs (Navin chose to skip a font).
+- **Not done (left for later):** the Non-Conformance dialog contents and defects /
+  corrective actions; the extra Cost Modelling columns and Factors Navin flagged;
+  per-shipment local costs and container weight limits; making Admin also tick User;
+  per-template pass/fail thresholds; per-product inspection results; tightening
+  co-manager payroll-report visibility; Drizzle `relations()`; a simpler way to
+  register a new tool.
+
+**Verified:** `pnpm lint`, `pnpm typecheck` and `pnpm test` (124 tests) pass at every
+sub-step. Claude checked the PDF output, the login page and header in both themes, the
+expired-login redirect, and the new routes' owner-only refusals in the Claude app's
+browser pane. Everything that needs another account or writes real data (the manager
+banner, deactivation, merges, holidays, storage clean-up, the reviewer rule) was
+tested by Navin; Claude cannot sign in as other users.
