@@ -80,3 +80,20 @@ export interface InspectionReportView {
   events: { id: number, action: string, actorName: string, comment: string | null, createdAt: string }[]
   can: { edit: boolean, review: boolean, delete: boolean }
 }
+
+export interface InspectionTemplateListItem {
+  id: number
+  name: string
+  active: boolean
+  sectionCount: number
+  pointCount: number
+  updatedAt: string
+}
+
+export interface InspectionTemplateResponse {
+  id: number
+  name: string
+  active: boolean
+  sections: { name: string, points: { text: string }[] }[]
+  updatedAt: string
+}

@@ -3,9 +3,28 @@ import type { InspectionMyRoleResponse } from '~~/shared/types/inspection'
 
 const authStore = useAuthStore()
 
-const { pending, error } = await useAsyncData('inspection-reporting-my-role', () =>
+const { data: role, pending, error } = await useAsyncData('inspection-reporting-my-role', () =>
   useApiFetch<InspectionMyRoleResponse>('/api/tools/inspection-reporting/my-role')
 )
+
+type TabValue = 'reports' | 'templates' | 'locations'
+
+// Admins also get Templates and Suppliers & DCs. ?tab= opens straight on one
+// (the template builder returns to ?tab=templates).
+const tabItems = computed<{ label: string, value: TabValue }[]>(() => [
+  { label: 'Reports', value: 'reports' },
+  ...(role.value?.isAdmin
+    ? [
+        { label: 'Templates', value: 'templates' as const },
+        { label: 'Suppliers & DCs', value: 'locations' as const }
+      ]
+    : [])
+])
+
+const route = useRoute()
+const wanted = route.query.tab
+const tab = ref<TabValue>(wanted === 'templates' || wanted === 'locations' ? wanted : 'reports')
+const shownTab = computed<TabValue>(() => (tabItems.value.some(t => t.value === tab.value) ? tab.value : 'reports'))
 </script>
 
 <template>
@@ -43,11 +62,36 @@ const { pending, error } = await useAsyncData('inspection-reporting-my-role', ()
       Loading…
     </div>
 
-    <div
-      v-else
-      class="mt-6"
-    >
-      <InspectionReportingReportList />
-    </div>
+    <template v-else>
+      <UTabs
+        v-if="tabItems.length > 1"
+        v-model="tab"
+        class="mt-6"
+        :items="tabItems"
+        :content="false"
+      />
+
+      <!-- v-show, not v-if: switching tabs must not lose what's on the other tab. -->
+      <div
+        v-show="shownTab === 'reports'"
+        class="mt-6"
+      >
+        <InspectionReportingReportList />
+      </div>
+      <div
+        v-if="role?.isAdmin"
+        v-show="shownTab === 'templates'"
+        class="mt-6"
+      >
+        <InspectionReportingTemplatesAdmin />
+      </div>
+      <div
+        v-if="role?.isAdmin"
+        v-show="shownTab === 'locations'"
+        class="mt-6"
+      >
+        <InspectionReportingLocationsAdmin />
+      </div>
+    </template>
   </UContainer>
 </template>
