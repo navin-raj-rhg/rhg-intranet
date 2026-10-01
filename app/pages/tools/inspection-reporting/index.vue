@@ -29,6 +29,15 @@ const shownTab = computed<TabValue>(() => (tabItems.value.some(t => t.value === 
 
 <template>
   <UContainer class="py-10">
+    <UButton
+      to="/"
+      variant="link"
+      color="neutral"
+      icon="i-lucide-arrow-left"
+      label="Back to the dashboard"
+      class="-ml-2 mb-2"
+    />
+
     <UPageHeader
       title="Inspection Reporting"
       description="Product QC inspections at suppliers and DCs: checklists, photos and non-conformances, reviewed and closed by a reviewer."

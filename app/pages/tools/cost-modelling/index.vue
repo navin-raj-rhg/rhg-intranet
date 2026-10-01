@@ -32,6 +32,15 @@ const tab = ref<TabValue>(
 
 <template>
   <UContainer class="py-10">
+    <UButton
+      to="/"
+      variant="link"
+      color="neutral"
+      icon="i-lucide-arrow-left"
+      label="Back to the dashboard"
+      class="-ml-2 mb-2"
+    />
+
     <UPageHeader
       title="Cost Modelling"
       description="Cost products from FOB price to landed cost in AUD, with container fill, shipping per unit and margins."

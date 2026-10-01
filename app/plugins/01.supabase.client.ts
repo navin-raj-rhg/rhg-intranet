@@ -1,9 +1,11 @@
-import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient } from '@supabase/ssr'
 
 export default defineNuxtPlugin(() => {
   const config = useRuntimeConfig()
 
-  const supabase = createClient(
+  // The browser client keeps the login in cookies (not browser storage), so
+  // the server receives it automatically with every request.
+  const supabase = createBrowserClient(
     config.public.supabaseUrl,
     config.public.supabaseAnonKey
   )

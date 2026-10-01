@@ -15,6 +15,7 @@
  */
 :root {
   --rhg-header: #006B96;
+  --rhg-loading-bar: #FCA311;
 
   --ui-primary: #FCA311;
   --ui-secondary: #14213D;
@@ -44,6 +45,9 @@
 }
 
 .dark {
+  /* The loading bar sits over the blue header, so it needs to be light in dark mode. */
+  --rhg-loading-bar: #A6E1FA;
+
   --ui-primary: #0E6BA8;
   --ui-secondary: #A6E1FA;
 

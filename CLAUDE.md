@@ -74,12 +74,10 @@ next Step.
 - **Every sub-step:** `pnpm lint`, `pnpm typecheck` and `pnpm test` must pass
   before stopping. Test any new logic; drive new screens in a browser where you
   can (including phone width).
-- API routes use a **Bearer token**, not cookies - an API URL typed into the
-  address bar is always unauthenticated. To call one from the browser console:
+- The login is a **Supabase cookie** (Step 14, `@supabase/ssr`), sent automatically;
+  there is no Bearer header. To call an API route from a signed-in browser console:
   ```js
-  const k = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
-  const token = JSON.parse(localStorage[k]).access_token
-  fetch('/api/...', { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json()).then(console.log)
+  fetch('/api/...').then(r => r.json()).then(console.log)
   ```
 
 ## Conventions (details and reasons in docs/project-status.md)

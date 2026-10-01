@@ -106,7 +106,7 @@ Auth uses Supabase Auth (email/password for now — Microsoft 365 SSO gets
 added before company-wide rollout, once this has been approved as a proper
 project). How it fits together:
 
-- **Client side**: `app/plugins/supabase.client.ts` creates a Supabase
+- **Client side** (cookie-based since Step 14): `app/plugins/01.supabase.client.ts` creates a Supabase
   browser client, used only for sign in / sign up / sign out. All actual
   *data* still goes through our own Nitro API + Drizzle, never through
   `supabase-js` directly.
@@ -114,8 +114,8 @@ project). How it fits together:
   profile, and exposes `signIn`, `signUp`, `signOut`.
 - **`app/composables/useApiFetch.ts`** — use this (not plain `$fetch`) for
   any call to our own `/api/...` routes that needs to know who's calling.
-  It attaches the Supabase access token as a Bearer header automatically.
-- **`server/middleware/auth.ts`** validates that Bearer token on every
+  The login travels in the Supabase cookie (before Step 14 it was a Bearer header).
+- **`server/middleware/auth.ts`** validates that cookie login on every
   `/api/*` request and attaches the verified user to `event.context.user`.
 - **`server/utils/requireUser.ts`** — `requireUser()`, `requireProfile()`,
   and `requireOwner()` are the building blocks every protected API route
@@ -874,8 +874,8 @@ discarding / deleting a report, deletes the stored files too (best effort).
 (`server/utils/generateInspectionReportPdf.ts`): result, supplier/DC, template,
 date, reference, inspector, products and notes, a counts summary, every section and
 point with its coloured answer, comment and photos, the history, and a page footer.
-A draft or in-review PDF says the result is not final. The API needs the Bearer
-header, so the button fetches the file and saves it. Fonts are the built-in PDF
+A draft or in-review PDF says the result is not final. The button fetches the file
+as a blob and saves it. Fonts are the built-in PDF
 ones, so **Chinese / other non-Western text prints as "?"**; photos are embedded
 full size (JPEG / PNG only, 80 MB cap per PDF - **HEIC is listed as "not shown"**).
 
@@ -1044,3 +1044,53 @@ expired-login redirect, and the new routes' owner-only refusals in the Claude ap
 browser pane. Everything that needs another account or writes real data (the manager
 banner, deactivation, merges, holidays, storage clean-up, the reviewer rule) was
 tested by Navin; Claude cannot sign in as other users.
+
+## Step 14: cookie-based sessions (`@supabase/ssr`)
+
+Moves the login out of browser storage and into a secure cookie, so the server
+knows who is asking before it sends anything. Nothing changes on screen. Built in
+sub-steps 14.2 to 14.7 with Claude Code; Navin tested each stop.
+
+### How it fits together
+
+- **Browser:** `app/plugins/01.supabase.client.ts` uses `createBrowserClient`
+  from `@supabase/ssr`, which keeps the session in `sb-...-auth-token` cookies.
+- **API calls:** `useApiFetch` no longer adds a Bearer header; the browser sends
+  the cookie by itself. It still signs out and goes to /login on a 401.
+- **Server:** `server/utils/supabaseServer.ts` (`serverSupabase(event)`) reads the
+  login from the request cookies and writes refreshed cookies back.
+  `server/middleware/auth.ts` takes the access token from the cookie (Supabase
+  refreshes an expiring one there), checks it with Supabase or the 60-second cache,
+  and attaches the user to `event.context.user`. **The Bearer header is no longer
+  accepted.**
+- **Page protection:** `server/middleware/pageGuard.ts` (rule in
+  `shared/utils/pageGuard.ts`, tested) answers a signed-out visitor's page request
+  with a 302 to `/login`, so the app is never sent to them. API calls, scripts and
+  images are not redirected (API calls answer 401). `ssr` is still `false`.
+- **Calling an API route from the browser console** now needs no token:
+  `fetch('/api/auth/me').then(r => r.json()).then(console.log)`.
+
+### One-time setup
+
+None: no migration and no SQL. The new package is `@supabase/ssr`. **Everyone
+signs in once more after the release** (old logins were stored the old way).
+
+### Also in this step (small fixes)
+
+- The loading bar is light blue in dark mode (it was invisible on the blue header).
+- Every tool's home page has a "Back to the dashboard" link, like Storage clean-up.
+
+### Known limitations
+
+- Still a client-rendered app (`ssr: false`); turning SSR back on is a separate,
+  larger job (this step is its prerequisite).
+- Deactivated people are still handled on the client (the `/deactivated` page needs
+  their profile); the API refuses them either way.
+- A login cancelled in Supabase can keep working for up to a minute (the cache).
+- File downloads still fetch a blob and save it, though a plain link would now work.
+
+**Verified:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (128 tests) and `pnpm build`
+pass. Claude checked with `curl` that a signed-out request for a page returns 302 to
+/login, /login returns 200, and an API call returns 401. Everything needing a real
+login (all tools, several accounts, refresh, sign-out, closing and reopening the
+browser) was tested by Navin.

@@ -41,6 +41,15 @@ const tab = ref<TabValue>((requestedTab ?? tabItems.value[0]!).value)
 
 <template>
   <UContainer class="py-10">
+    <UButton
+      to="/"
+      variant="link"
+      color="neutral"
+      icon="i-lucide-arrow-left"
+      label="Back to the dashboard"
+      class="-ml-2 mb-2"
+    />
+
     <UPageHeader
       title="Leave Applications"
       description="Apply for leave, check your balances and see who is away. Managers approve their team's leave here."

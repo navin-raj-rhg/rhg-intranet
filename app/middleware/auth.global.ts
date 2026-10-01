@@ -1,8 +1,6 @@
-// Client-only guard for this scaffold: session lives in browser storage
-// (via Supabase's client-side auth), so there is nothing to check on the
-// server render pass. Real data protection happens server-side in
-// server/middleware/auth.ts, which validates the bearer token on every
-// /api/* call regardless of what the page itself shows.
+// Client-only page guard (the server-side page redirect arrives in 14.5).
+// Real data protection happens server-side in server/middleware/auth.ts, which
+// validates the login on every /api/* call regardless of what the page shows.
 export default defineNuxtRouteMiddleware((to) => {
   if (import.meta.server) return
 

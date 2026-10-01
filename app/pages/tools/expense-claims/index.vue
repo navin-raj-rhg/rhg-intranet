@@ -31,6 +31,15 @@ const showEmployeeView = computed(() => isEmployee.value && (!isManager.value ||
 
 <template>
   <UContainer class="py-10">
+    <UButton
+      to="/"
+      variant="link"
+      color="neutral"
+      icon="i-lucide-arrow-left"
+      label="Back to the dashboard"
+      class="-ml-2 mb-2"
+    />
+
     <UPageHeader
       title="Expense Claims"
       description="Submit expense claims and, for managers, approve them and run payroll reports."

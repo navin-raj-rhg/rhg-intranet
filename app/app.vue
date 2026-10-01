@@ -28,7 +28,7 @@ useSeoMeta({
   <UApp>
     <!-- Thin bar across the top while a page is opening, so a slow click never looks stuck -->
     <NuxtLoadingIndicator
-      color="var(--ui-primary)"
+      color="var(--rhg-loading-bar)"
       :height="4"
       :throttle="0"
     />

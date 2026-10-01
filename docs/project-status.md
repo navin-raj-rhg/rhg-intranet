@@ -1,4 +1,4 @@
-# RHG Intranet — Project Status (updated through Step 13)
+# RHG Intranet — Project Status (updated through Step 14)
 
 > **Where this lives:** `docs/project-status.md` in the repo is the source of
 > truth (Claude Code reads it via `CLAUDE.md`). Navin may also keep a copy in
@@ -15,7 +15,7 @@ live URL.
 **Numbering convention (use this when talking to Claude):** everything is a
 numbered **Step** (Step 1 ... Step 17 below), with sub-steps like 10.4. The
 **Phases** group the steps. Refer to work by step number, e.g. "let's do
-Step 14" or "back to 11.8b". Steps 1-13 are done; Steps 14+ are the agreed
+Step 14" or "back to 11.8b". Steps 1-14 are done; Steps 15+ are the agreed
 roadmap and have not been started.
 
 ## Live demo
@@ -62,7 +62,7 @@ Supabase trigger scripts).
 **Full-stack testing (added in Step 11):** Claude builds the app
 (`pnpm build`), runs `.output/server/index.mjs` against that local Postgres
 (`NUXT_SUPABASE_DB_POOL_URL`), and points `NUXT_PUBLIC_SUPABASE_URL` at a tiny
-fake Supabase auth server (answers `/auth/v1/user`, treating the Bearer token as
+fake Supabase auth server (answers `/auth/v1/user`, treating the access token (sent in the Supabase cookie since Step 14) as
 the user id, with CORS on). That exercises the **real** API routes, roles and
 queries end to end - only the login itself is faked. Pages are then driven in
 headless Chromium with Playwright (fake session in localStorage under
@@ -107,8 +107,8 @@ The short version of these rules is in `CLAUDE.md` at the repo root.
   auto-imports otherwise cause errors like "parseDateMY is not defined").
   When a step includes a migration, `pnpm db:migrate` is run locally.
 - Claude should not assume one action fixes something without checking: e.g.
-  a suggested address-bar check of an API route is invalid because the app
-  authenticates with a Bearer header, not cookies (see Testing setup).
+  an API route check must go through a signed-in browser (the login is in a
+  cookie since Step 14; see Testing setup).
 
 ## Tech Stack
 
@@ -123,7 +123,7 @@ The short version of these rules is in `CLAUDE.md` at the repo root.
 - **File storage:** Cloudflare R2 (S3-compatible), accessed via presigned URLs
 - **PDF generation:** `pdfkit` (expense-claims payroll report; inspection reports)
 - **Tests:** `pnpm test` runs Node's built-in test runner over `tests/*.test.ts`
-  (pure logic only, no database) - **124 tests as of Step 13**.
+  (pure logic only, no database) - **128 tests as of Step 14**.
 - **Package manager:** pnpm
 - **Hosting:** Railway (Node server), auto-deploying from `main`
 
@@ -179,10 +179,10 @@ the tool page). **Convention:** the dashboard's new-sign-up banner links to
 
 **Data access:** All data goes through Nitro server API routes using
 Drizzle — never direct `supabase-js` queries from the client. Every `/api/*`
-route is protected by `server/middleware/auth.ts`, which validates a
-**`Authorization: Bearer <token>`** header (the client's `useApiFetch`
-attaches it from the Pinia auth store). Cookies are not used, so a browser
-address-bar request is always unauthenticated.
+route is protected by `server/middleware/auth.ts`, which validates the
+Supabase login **cookie** (Step 14, `@supabase/ssr`; before that a Bearer
+header). `useApiFetch` just sends the cookie along. Signed-out page requests
+are redirected to /login by `server/middleware/pageGuard.ts`.
 
 **File storage:** One R2 bucket, organised by key prefix
 (`<tool-id>/<yyyy>/<mm>/<uuid>-<filename>`). Browser uploads go straight to
@@ -238,6 +238,7 @@ pattern spreads.
 | 11. Cost Modelling | ✅ Done (11.1-11.10, all pushed) | Factors (FX, CBM, freight, port local costs), saved cost models with frozen figures, landed cost per AU port, margins, duplicate, product look-up (see below) |
 | 12. Inspection Reporting | ✅ Done (12.1-12.12) | Product QC inspections at suppliers/DCs: admin-built templates, phone-first checklist with photos and Minor/Major non-conformances, calculated result, review and close, saved products, PDF (see below) |
 | 13. Styling and clean-ups | ✅ Done (13.2-13.13) | RHG look, loading bar and faster requests, manager approvals banner, deactivate user, leave public holidays, cost model PDF and Setup tab, storage clean-up, many small fixes (see below) |
+| 14. Cookie-based sessions | ✅ Done (14.1-14.7) | `@supabase/ssr` cookies instead of the Bearer header, server-side redirect of signed-out page requests (see below) |
 
 ### Step 11: Cost Modelling (complete)
 
@@ -369,8 +370,8 @@ answer), `inspection_photos`, `inspection_events` (history + reviewer comments),
 - **Photos** are added in three steps: server approves type/size/permission and
   returns a presigned upload link locked to that exact size; the browser uploads
   to R2; the server confirms the file really exists, then records it.
-- **Downloads behind the Bearer header** can't be plain links: the screen fetches
-  the file as a blob and saves it (`downloadPdf` in `ReportEditor.vue`).
+- **Downloads** are fetched as a blob and saved (needed when the login was a Bearer
+  header; a plain link would now work since Step 14, but nothing was changed) (`downloadPdf` in `ReportEditor.vue`).
 - **Reports delete their R2 photo files** (best effort) when a draft is discarded
   or a report deleted.
 - **Migrations that replace a column** keep the old column for one release
@@ -478,6 +479,41 @@ manual SQL.
 - Claude could only check the login page and header in the browser pane (the screens need
   a real login); Navin tested the rest, including every multi-account behaviour.
 
+### Step 14: Cookie-based sessions (complete)
+
+Sub-steps: 14.1 decisions, 14.2 plumbing (package, cookie browser client, server
+helper), 14.3 server middleware reads the cookie, 14.4 `useApiFetch` stops sending
+the header, 14.5 server-side page redirect, 14.6 full check, 14.7 remove the Bearer
+fallback and docs. Not committed by Claude; Navin commits and pushes.
+
+**Decisions (Navin's, all as recommended):** keep Bearer as a temporary fallback until
+the end (then removed); server-side redirect of signed-out page requests only (never
+`/api/*`), with the client guard kept as a backup; **everyone signs in once more after
+release**; `ssr: false` unchanged; Supabase's default cookie lifetime, no "remember me";
+no migration or SQL; Railway's HTTPS covers cookies.
+
+**How it works:** `app/plugins/01.supabase.client.ts` (`createBrowserClient`),
+`server/utils/supabaseServer.ts` (`serverSupabase(event)`), `server/middleware/auth.ts`
+(cookie -> access token -> Supabase check / 60 s cache; an expiring login is refreshed
+and the new cookie sent back), `server/middleware/pageGuard.ts` +
+`shared/utils/pageGuard.ts` (302 to /login for signed-out page requests; 4 new tests).
+`useApiFetch` no longer adds a header but still signs out and redirects on a 401.
+
+**Also done (small fixes asked for during the step):** loading bar light blue in dark
+mode (it was invisible on the blue header); "Back to the dashboard" link on the home
+page of every tool.
+
+**Release note:** no migration. After pushing, everyone is signed out once and signs in
+again.
+
+**Known limitations (acceptable for the demo):**
+- Still `ssr: false`; this step is the prerequisite for turning SSR on, not that change.
+- Deactivated people are redirected on the client (the API refuses them regardless).
+- A login cancelled in Supabase can work for up to a minute (the cache).
+- Downloads still use the blob approach although a plain link would now work.
+- Claude could not sign in to the real Supabase; it checked build, tests and the signed-out
+  redirect with `curl`, and Navin tested the signed-in behaviour with several accounts.
+
 ## Step 9 reference (still true)
 
 - Expense-claims specifics: categories are a fixed 7-value enum shared via
@@ -539,7 +575,7 @@ README's Step 10 section.
 - No Microsoft SSO yet - planned before company-wide launch.
 - `NUXT_SUPABASE_DB_URL` (direct connection) is intentionally not set on
   Railway - migrations must be run manually from a local machine after any
-  schema change; a push alone does not apply them (latest: `0011`). **Order for a
+  schema change; a push alone does not apply them (latest: `0011`; Step 14 added none). **Order for a
   release with a migration that ADDS something: run `pnpm db:migrate` first, then push**
   (the code needs the new tables or columns). **When a migration DROPS something, push
   first, wait for the deploy, then migrate** (as with `0011`). Manual SQL in `server/db/manual-sql/` (001 new-user trigger, 002
@@ -562,13 +598,10 @@ README's Step 10 section.
   template(s) and the supplier / DC list before using it. Destructive SQL is run by Navin
   in the Supabase SQL editor from statements Claude writes.
 - Use a private window for the non-owner accounts.
-- **To call an API route authenticated from the browser console** (the address
-  bar can't - no cookies): read the Supabase token from localStorage and send
-  it as a Bearer header:
+- **To call an API route from the browser console** (Step 14: the login is in a
+  cookie, so no token is needed):
   ```js
-  const k = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
-  const token = JSON.parse(localStorage[k]).access_token
-  fetch('/api/...', { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json()).then(console.log)
+  fetch('/api/...').then(r => r.json()).then(console.log)
   ```
 
 ## Roadmap (agreed order)
@@ -639,7 +672,7 @@ chosen):**
 
 ### Phase 3 - Launch hardening (before company-wide rollout)
 
-- **Step 14 - `@supabase/ssr` cookie-based sessions.** Placed first on purpose:
+- **Step 14 - `@supabase/ssr` cookie-based sessions.** ✅ done (see above). Original plan, placed first on purpose:
   it changes how the session is stored (cookies instead of browser storage +
   Bearer header), so it is simplest to do before or together with Microsoft
   SSO, whose redirect/callback flow benefits from it. It also enables
@@ -650,7 +683,7 @@ chosen):**
   seconds), the auth store and the login flow all change - keep it a step of its own, and re-test
   every tool afterwards. Optional if server-side page protection turns out not
   to matter, but recommended.
-- **Step 15 - Sign-up restriction to company email addresses** (so strangers
+- **Step 15 (next) - Sign-up restriction to company email addresses** (so strangers
   can't create accounts). Options to weigh at the time: a Supabase auth hook or
   database check that rejects other domains, and/or removing email/password
   sign-up entirely once SSO is in.

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { User } from '@supabase/supabase-js'
+import type { H3Event } from 'h3'
 
 // Declare the shape we attach to event.context so server routes get
 // autocomplete/type-checking on event.context.user.
@@ -15,11 +16,13 @@ declare module 'h3' {
 const checkedLogins = createTokenCache<User>(60_000)
 
 export default defineEventHandler(async (event) => {
-  if (!event.path.startsWith('/api/')) return
+  // API calls, and pages (so the next middleware can redirect signed-out visitors).
+  const isApi = event.path.startsWith('/api/')
+  if (!isApi && !isPageNavigation(event.method, event.path, getHeader(event, 'accept'))) return
 
-  const authHeader = getHeader(event, 'authorization')
-  const token = authHeader?.replace('Bearer ', '')
-  if (!token) return // no token - route handlers that require auth will reject via requireUser()
+  // The login arrives in the Supabase cookie (Step 14); there is no Bearer header any more.
+  const token = await tokenFromCookie(event)
+  if (!token) return // no login - route handlers that require auth will reject via requireUser()
 
   const cached = checkedLogins.get(token)
   if (cached) {
@@ -37,6 +40,17 @@ export default defineEventHandler(async (event) => {
   checkedLogins.set(token, data.user, expiresAtMs)
   event.context.user = data.user
 })
+
+// Reads the access token from the Supabase cookie. If it has expired, Supabase
+// refreshes it here and the new cookie goes out with the response. The token is
+// still checked with Supabase (or the cache above) before anyone is trusted.
+async function tokenFromCookie(event: H3Event): Promise<string | undefined> {
+  const hasLoginCookie = Object.keys(parseCookies(event)).some(name => name.startsWith('sb-'))
+  if (!hasLoginCookie) return undefined
+
+  const { data } = await serverSupabase(event).auth.getSession()
+  return data.session?.access_token
+}
 
 // The token's own expiry (seconds since 1970, inside its payload), so a cached
 // login is never kept past it.
