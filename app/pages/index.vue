@@ -5,6 +5,7 @@ const toast = useToast()
 const { data: ownerStatus, refresh: refreshOwnerStatus } = await useFetch('/api/auth/owner-status')
 const tools = await useTools()
 const claimingOwner = ref(false)
+const openingToolId = ref<string | null>(null)
 
 // Owner-only: people who signed up but have no role in any tool yet.
 interface PendingUser {
@@ -149,11 +150,13 @@ async function claimOwner() {
           variant="outline"
           color="neutral"
           class="h-auto p-4 justify-start"
+          @click="openingToolId = tool.id"
         >
           <div class="flex items-center gap-3">
             <UIcon
-              :name="tool.icon || 'i-lucide-puzzle'"
+              :name="openingToolId === tool.id ? 'i-lucide-loader-circle' : (tool.icon || 'i-lucide-puzzle')"
               class="size-6 shrink-0"
+              :class="{ 'animate-spin': openingToolId === tool.id }"
             />
             <div class="text-left">
               <p class="font-medium">
