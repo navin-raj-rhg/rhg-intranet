@@ -4,9 +4,8 @@
  * years-of-service leave tiers and Birthday / Anniversary leave, so until they
  * are set, tiers fall back to the lowest and those two leave types are blocked.
  *
- * Dates are typed day-first (dd/mm/yyyy) and parsed here, not picked from the
- * browser's date input, so what people see never depends on browser language.
- * The server re-checks everything (past birth date, join after birth, ...).
+ * Dates use the browser's own date field (it moves dd -> mm -> yyyy by itself),
+ * kept as ISO YYYY-MM-DD. The server re-checks everything (past birth date, join after birth, ...).
  */
 interface DateUser {
   id: string
@@ -29,11 +28,10 @@ const { data: users, refresh } = await useAsyncData('leave-profile-dates', () =>
   useApiFetch<DateUser[]>('/api/admin/tools/leave-applications/users')
 )
 
-const asText = (iso: string | null) => (iso ? formatDateMY(iso) : '')
 const drafts = ref<Record<string, Draft>>({})
 
 function draftFrom(user: DateUser): Draft {
-  return { join: asText(user.joinDate), dob: asText(user.dateOfBirth) }
+  return { join: user.joinDate ?? '', dob: user.dateOfBirth ?? '' }
 }
 
 watch(users, (list) => {
@@ -44,41 +42,25 @@ watch(users, (list) => {
 
 const displayName = (user: DateUser) => user.fullName || user.email
 
-type Parsed = { ok: true, value: string | null } | { ok: false }
-
-// Empty = "not set" (null). Anything typed must be a real dd/mm/yyyy date.
-function parse(text: string): Parsed {
-  if (!text.trim()) return { ok: true, value: null }
-  const iso = parseDateMY(text)
-  return iso ? { ok: true, value: iso } : { ok: false }
-}
-
+// Empty = "not set" (null). The server checks the rest (past birth date, join after birth).
 function state(user: DateUser) {
   const draft = drafts.value[user.id]
-  const join = parse(draft?.join ?? '')
-  const dob = parse(draft?.dob ?? '')
-  const valid = join.ok && dob.ok
-  const dirty = !!draft && valid
-    && (join.value !== user.joinDate || dob.value !== user.dateOfBirth)
-  return { join, dob, valid, dirty }
-}
-
-function errorText(err: unknown) {
-  const e = err as { data?: { statusMessage?: string }, statusMessage?: string, message?: string }
-  return e?.data?.statusMessage || e?.statusMessage || e?.message || 'Something went wrong.'
+  const join = draft?.join || null
+  const dob = draft?.dob || null
+  const dirty = !!draft && (join !== user.joinDate || dob !== user.dateOfBirth)
+  return { join, dob, dirty }
 }
 
 const savingId = ref<string | null>(null)
 
 async function save(user: DateUser) {
   const s = state(user)
-  if (!s.join.ok || !s.dob.ok) return
 
   savingId.value = user.id
   try {
     await useApiFetch(`/api/admin/profiles/${user.id}/dates`, {
       method: 'PUT',
-      body: { joinDate: s.join.value, dateOfBirth: s.dob.value }
+      body: { joinDate: s.join, dateOfBirth: s.dob }
     })
     toast.add({ title: `Dates updated for ${displayName(user)}`, color: 'success' })
     await refresh()
@@ -104,9 +86,9 @@ const missingCount = computed(() =>
           Join dates and dates of birth
         </p>
         <p class="text-sm text-muted">
-          Type dates as dd/mm/yyyy. The join date sets each person's leave entitlement by years of service
+          The join date sets each person's leave entitlement by years of service
           and their Anniversary leave month; the date of birth sets their Birthday leave month.
-          Leave a box empty to mark it as not set.
+          Clear a date to mark it as not set.
         </p>
         <p
           v-if="missingCount"
@@ -154,24 +136,18 @@ const missingCount = computed(() =>
         v-if="drafts[user.id]"
         class="flex flex-1 flex-wrap items-start justify-end gap-x-6 gap-y-3"
       >
-        <UFormField
-          label="Join date"
-          :error="state(user).join.ok ? undefined : 'Use dd/mm/yyyy, e.g. 15/03/2020'"
-        >
+        <UFormField label="Join date">
           <UInput
             v-model="drafts[user.id]!.join"
-            placeholder="dd/mm/yyyy"
+            type="date"
             class="w-40"
           />
         </UFormField>
 
-        <UFormField
-          label="Date of birth"
-          :error="state(user).dob.ok ? undefined : 'Use dd/mm/yyyy, e.g. 01/08/1990'"
-        >
+        <UFormField label="Date of birth">
           <UInput
             v-model="drafts[user.id]!.dob"
-            placeholder="dd/mm/yyyy"
+            type="date"
             class="w-40"
           />
         </UFormField>
