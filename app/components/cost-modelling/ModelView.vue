@@ -32,6 +32,29 @@ async function deleteModel() {
   }
 }
 
+/* --- Save as PDF (the API needs the login header, so fetch the file, then save it) --- */
+const downloadingPdf = ref(false)
+
+async function downloadPdf() {
+  if (!model.value) return
+  downloadingPdf.value = true
+  try {
+    const blob = await useApiFetch<Blob>(`/api/tools/cost-modelling/models/${model.value.id}/pdf`, { responseType: 'blob' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${model.value.name.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '')}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  } catch (err) {
+    toast.add({ title: 'Could not create the PDF', description: errorText(err), color: 'error' })
+  } finally {
+    downloadingPdf.value = false
+  }
+}
+
 const ports = computed(() => model.value?.factorsSnapshot.destinations.map(d => d.port) ?? [])
 
 const savedText = computed(() => {
@@ -87,7 +110,16 @@ const savedText = computed(() => {
             </template>
           </p>
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
+          <UButton
+            icon="i-lucide-file-down"
+            label="Save as PDF"
+            color="neutral"
+            variant="outline"
+            :loading="downloadingPdf"
+            data-testid="save-pdf"
+            @click="downloadPdf"
+          />
           <UButton
             icon="i-lucide-copy"
             label="Duplicate"
