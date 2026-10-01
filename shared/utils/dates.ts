@@ -51,3 +51,19 @@ export function todayMY(now: Date = new Date()): string {
     day: '2-digit'
   }).format(now)
 }
+
+/** '05/10/2026 14:30': a moment shown in Malaysian time (24-hour clock), whatever the browser's timezone. */
+export function formatDateTimeMY(moment: Date): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kuala_Lumpur',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23'
+    }).formatToParts(moment).map(p => [p.type, p.value])
+  )
+  return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}`
+}

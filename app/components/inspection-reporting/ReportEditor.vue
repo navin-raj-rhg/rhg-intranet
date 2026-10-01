@@ -297,7 +297,58 @@ async function saveAndLeave() {
   if (await save(true)) decideLeave(true)
 }
 
-/* ---- discard the draft ---- */
+/* ---- history, "sent back" note and reviewer actions ---- */
+
+const eventLabels: Record<string, string> = {
+  created: 'Started',
+  submitted: 'Submitted for review',
+  returned: 'Sent back for changes',
+  closed: 'Closed'
+}
+const when = (iso: string) => formatDateTimeMY(new Date(iso))
+
+// A draft whose latest event is "returned" was sent back by a reviewer: show them why.
+const sentBack = computed(() => {
+  const last = report.value?.events.at(-1)
+  return report.value?.status === 'draft' && last?.action === 'returned' ? last : null
+})
+
+const reviewAction = ref<'return' | 'close' | null>(null)
+const reviewOpen = computed({
+  get: () => reviewAction.value !== null,
+  set: (open: boolean) => {
+    if (!open) reviewAction.value = null
+  }
+})
+const reviewComment = ref('')
+const reviewing = ref(false)
+
+function startReview(action: 'return' | 'close') {
+  reviewComment.value = ''
+  reviewAction.value = action
+}
+
+async function review() {
+  const action = reviewAction.value
+  if (!action) return
+  if (action === 'return' && !reviewComment.value.trim()) {
+    toast.add({ title: 'Say what needs changing so the inspector knows what to fix', color: 'warning' })
+    return
+  }
+  reviewing.value = true
+  try {
+    await useApiFetch(`${api}/status`, { method: 'POST', body: { action, comment: reviewComment.value.trim() || null } })
+    toast.add({ title: action === 'close' ? 'Report closed' : 'Sent back to the inspector', color: 'success' })
+    reviewAction.value = null
+    await refresh()
+  } catch (err) {
+    toast.add({ title: 'Could not do that', description: errorText(err), color: 'error' })
+  } finally {
+    reviewing.value = false
+  }
+}
+
+/* ---- delete: discard a draft, or an admin deleting a report ---- */
 
 const discardOpen = ref(false)
 const discarding = ref(false)
@@ -308,10 +359,10 @@ async function discard() {
     await useApiFetch(api, { method: 'DELETE' })
     baseline.value = snapshot() // nothing left to lose, so don't ask about unsaved changes
     discardOpen.value = false
-    toast.add({ title: 'Draft discarded', color: 'success' })
+    toast.add({ title: report.value?.status === 'draft' ? 'Draft discarded' : 'Report deleted', color: 'success' })
     await navigateTo('/tools/inspection-reporting')
   } catch (err) {
-    toast.add({ title: 'Could not discard the draft', description: errorText(err), color: 'error' })
+    toast.add({ title: 'Could not delete the report', description: errorText(err), color: 'error' })
   } finally {
     discarding.value = false
   }
@@ -348,13 +399,13 @@ async function discard() {
         :label="INSPECTION_OVERALL_LABELS[overall]"
       />
       <UButton
-        v-if="report.status === 'draft' && report.can.delete"
+        v-if="report.can.delete"
         class="ml-auto"
         size="sm"
         variant="ghost"
         color="error"
         icon="i-lucide-trash-2"
-        label="Discard draft"
+        :label="report.status === 'draft' ? 'Discard draft' : 'Delete report'"
         data-testid="discard-draft"
         @click="discardOpen = true"
       />
@@ -363,6 +414,15 @@ async function discard() {
       Report #{{ report.id }} · {{ report.templateName }} · started by {{ report.createdByName }}
     </p>
 
+    <UAlert
+      v-if="sentBack"
+      color="warning"
+      variant="subtle"
+      icon="i-lucide-undo-2"
+      :title="`Sent back for changes by ${sentBack.actorName}`"
+      :description="sentBack.comment ?? ''"
+      data-testid="sent-back"
+    />
     <UAlert
       v-if="!canEdit && report.status === 'draft'"
       color="neutral"
@@ -375,7 +435,7 @@ async function discard() {
       color="warning"
       variant="subtle"
       title="This report is in review"
-      description="It can't be edited while it is being reviewed."
+      :description="report.can.review ? 'Check the answers and photos, then close the report or send it back to the inspector.' : 'It can\'t be edited while it is being reviewed.'"
     />
     <UAlert
       v-else-if="report.status === 'closed'"
@@ -555,6 +615,32 @@ async function discard() {
       </template>
     </UAlert>
 
+    <!-- History -->
+    <UCard data-testid="history">
+      <template #header>
+        <h3 class="font-semibold">
+          History
+        </h3>
+      </template>
+      <ol class="space-y-3 text-sm">
+        <li
+          v-for="e in report.events"
+          :key="e.id"
+        >
+          <p>
+            <span class="font-medium">{{ eventLabels[e.action] ?? e.action }}</span>
+            <span class="text-muted"> · {{ e.actorName }} · {{ when(e.createdAt) }}</span>
+          </p>
+          <p
+            v-if="e.comment"
+            class="mt-0.5 whitespace-pre-line text-muted"
+          >
+            "{{ e.comment }}"
+          </p>
+        </li>
+      </ol>
+    </UCard>
+
     <!-- Summary and actions -->
     <div class="sticky bottom-0 z-10 -mx-4 border-t border-default bg-default/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-lg sm:border">
       <div class="flex flex-wrap items-center justify-between gap-3">
@@ -600,6 +686,25 @@ async function discard() {
             :disabled="saving"
             data-testid="submit-review"
             @click="askSubmit"
+          />
+        </div>
+        <div
+          v-else-if="report.can.review"
+          class="flex flex-wrap items-center gap-2"
+        >
+          <UButton
+            variant="outline"
+            color="warning"
+            icon="i-lucide-undo-2"
+            label="Send back"
+            data-testid="send-back"
+            @click="startReview('return')"
+          />
+          <UButton
+            icon="i-lucide-check-check"
+            label="Close report"
+            data-testid="close-report"
+            @click="startReview('close')"
           />
         </div>
       </div>
@@ -676,12 +781,12 @@ async function discard() {
 
     <UModal
       v-model:open="discardOpen"
-      title="Discard this draft?"
+      :title="report.status === 'draft' ? 'Discard this draft?' : 'Delete this report?'"
       :description="`Report #${report.id} for ${report.locationName}`"
     >
       <template #body>
         <p class="text-sm">
-          The draft, its answers and its photos will be permanently deleted. This can't be undone.
+          The {{ report.status === 'draft' ? 'draft' : 'report' }}, its answers, photos and history will be permanently deleted. This can't be undone.
         </p>
       </template>
       <template #footer>
@@ -694,11 +799,68 @@ async function discard() {
             @click="discardOpen = false"
           />
           <UButton
-            label="Discard draft"
+            :label="report.status === 'draft' ? 'Discard draft' : 'Delete report'"
             color="error"
             :loading="discarding"
             data-testid="confirm-discard"
             @click="discard"
+          />
+        </div>
+      </template>
+    </UModal>
+
+    <UModal
+      v-model:open="reviewOpen"
+      :title="reviewAction === 'close' ? 'Close this report?' : 'Send back to the inspector?'"
+      :description="`Report #${report.id} for ${report.locationName}`"
+    >
+      <template #body>
+        <div class="space-y-3">
+          <UAlert
+            v-if="reviewAction === 'close'"
+            :color="overallColor[overall]"
+            variant="subtle"
+            icon="i-lucide-clipboard-check"
+            :title="`The result will be final: ${INSPECTION_OVERALL_LABELS[overall]}`"
+            :description="`${tally.compliant} compliant, ${tally.minor} minor and ${tally.major} major non-conformances, ${tally.na} N/A. A closed report can't be changed.`"
+            data-testid="close-summary"
+          />
+          <p
+            v-else
+            class="text-sm"
+          >
+            The report goes back to a draft so the inspector can fix it and submit it again.
+          </p>
+          <UFormField
+            :label="reviewAction === 'close' ? 'Comment (optional)' : 'What needs changing?'"
+            :required="reviewAction === 'return'"
+          >
+            <UTextarea
+              v-model="reviewComment"
+              :rows="3"
+              autoresize
+              maxlength="2000"
+              class="w-full"
+              data-testid="review-comment"
+            />
+          </UFormField>
+        </div>
+      </template>
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton
+            label="Cancel"
+            color="neutral"
+            variant="outline"
+            :disabled="reviewing"
+            @click="reviewAction = null"
+          />
+          <UButton
+            :label="reviewAction === 'close' ? 'Close report' : 'Send back'"
+            :color="reviewAction === 'close' ? 'primary' : 'warning'"
+            :loading="reviewing"
+            data-testid="confirm-review"
+            @click="review"
           />
         </div>
       </template>
