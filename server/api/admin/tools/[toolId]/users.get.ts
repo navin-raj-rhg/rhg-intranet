@@ -33,6 +33,7 @@ export default defineEventHandler(async (event) => {
     joinDate: u.joinDate,
     dateOfBirth: u.dateOfBirth,
     createdAt: u.createdAt,
+    deactivatedAt: u.deactivatedAt,
     roles: roleRows.filter(r => r.userId === u.id).map(r => r.roleKey),
     managerIds: linkRows.filter(l => l.employeeId === u.id).map(l => l.managerId)
   }))

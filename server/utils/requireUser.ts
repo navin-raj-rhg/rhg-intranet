@@ -18,7 +18,7 @@ export function requireUser(event: H3Event): User {
  * been set up, or ran before this migration existed), it's created here as
  * a fallback so the app keeps working either way.
  */
-export async function requireProfile(event: H3Event) {
+export async function requireProfile(event: H3Event, opts: { allowDeactivated?: boolean } = {}) {
   const user = requireUser(event)
   const db = useDb()
 
@@ -36,6 +36,15 @@ export async function requireProfile(event: H3Event) {
       throw createError({ statusCode: 500, statusMessage: 'Failed to create profile' })
     }
     profile = inserted
+  }
+
+  // Deactivated people (Step 13.7) are refused everywhere except /api/auth/me,
+  // which the app uses to show them a "deactivated" screen.
+  if (profile.deactivatedAt && !opts.allowDeactivated) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: 'Your account has been deactivated. Please contact the workspace owner.'
+    })
   }
 
   return profile

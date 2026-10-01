@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
 
   const [profiles, roleRows] = await Promise.all([
     db.query.profiles.findMany({
-      where: (p, { eq }) => eq(p.isOwner, false),
+      where: (p, { and, eq, isNull }) => and(eq(p.isOwner, false), isNull(p.deactivatedAt)),
       orderBy: (p, { desc }) => desc(p.createdAt)
     }),
     db.query.userToolRoles.findMany({ columns: { userId: true } })

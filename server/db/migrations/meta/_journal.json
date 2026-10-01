@@ -64,6 +64,13 @@
       "when": 1790841882036,
       "tag": "0008_green_wolverine",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790854122989,
+      "tag": "0009_dashing_hawkeye",
+      "breakpoints": true
     }
   ]
 }

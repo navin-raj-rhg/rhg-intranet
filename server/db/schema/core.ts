@@ -30,6 +30,9 @@ export const profiles = pgTable('profiles', {
   // nullable - existing users have neither until the owner fills them in.
   joinDate: date('join_date'),
   dateOfBirth: date('date_of_birth'),
+  // Set by the owner (Step 13.7) when someone leaves. Null = active. A
+  // deactivated person is refused by every API route, but their history stays.
+  deactivatedAt: timestamp('deactivated_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 })

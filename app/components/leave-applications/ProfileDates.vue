@@ -14,6 +14,7 @@ interface DateUser {
   isOwner: boolean
   joinDate: string | null
   dateOfBirth: string | null
+  deactivatedAt: string | null
 }
 
 interface Draft {
@@ -24,8 +25,9 @@ interface Draft {
 const toast = useToast()
 
 // Same list the access card uses; its own key so refreshing one never disturbs the other.
-const { data: users, refresh } = await useAsyncData('leave-profile-dates', () =>
-  useApiFetch<DateUser[]>('/api/admin/tools/leave-applications/users')
+const { data: users, refresh } = await useAsyncData('leave-profile-dates', async () =>
+  // People who have left (deactivated) are not listed.
+  (await useApiFetch<DateUser[]>('/api/admin/tools/leave-applications/users')).filter(u => !u.deactivatedAt)
 )
 
 const drafts = ref<Record<string, Draft>>({})

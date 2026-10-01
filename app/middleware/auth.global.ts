@@ -13,6 +13,11 @@ export default defineNuxtRouteMiddleware((to) => {
     return navigateTo('/login')
   }
 
+  // Someone the owner has deactivated only ever sees the "deactivated" page.
+  if (authStore.profile?.deactivatedAt && to.path !== '/deactivated') {
+    return navigateTo('/deactivated')
+  }
+
   if (authStore.user && to.path === '/login') {
     return navigateTo('/')
   }

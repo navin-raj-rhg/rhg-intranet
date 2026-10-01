@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne, notInArray } from 'drizzle-orm'
+import { and, eq, inArray, isNull, ne, notInArray } from 'drizzle-orm'
 import type { useDb } from '../db/client'
 import { profiles, toolManagerLinks, toolRegistry, toolRoles, userToolRoles } from '../db/schema'
 
@@ -48,6 +48,9 @@ export async function saveToolUserAccess(db: Db, input: SaveToolUserAccessInput)
 
     const target = await tx.query.profiles.findFirst({ where: eq(profiles.id, userId) })
     if (!target) throw new ToolAccessError(404, 'User not found')
+    if (target.deactivatedAt) {
+      throw new ToolAccessError(409, `${target.fullName || target.email} is deactivated. Reactivate them before changing their access.`)
+    }
 
     const definedKeys = (await tx.select({ k: toolRoles.roleKey }).from(toolRoles).where(eq(toolRoles.toolId, toolId)))
       .map(r => r.k)
@@ -79,14 +82,16 @@ export async function saveToolUserAccess(db: Db, input: SaveToolUserAccessInput)
         const validRows = await tx
           .select({ id: userToolRoles.userId })
           .from(userToolRoles)
+          .innerJoin(profiles, eq(profiles.id, userToolRoles.userId))
           .where(and(
+            isNull(profiles.deactivatedAt),
             eq(userToolRoles.toolId, toolId),
             eq(userToolRoles.roleKey, 'manager'),
             inArray(userToolRoles.userId, managerIds)
           ))
         const valid = new Set(validRows.map(r => r.id))
         if (managerIds.some(id => !valid.has(id))) {
-          throw new ToolAccessError(400, 'Every chosen manager must hold the Manager role in this tool')
+          throw new ToolAccessError(400, 'Every chosen manager must hold the Manager role in this tool and not be deactivated')
         }
       }
 

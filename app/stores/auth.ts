@@ -5,6 +5,8 @@ export interface Profile {
   email: string
   fullName: string | null
   isOwner: boolean
+  /** Set when the owner has deactivated this person; they can no longer use the app. */
+  deactivatedAt: string | null
   createdAt: string
   updatedAt: string
 }

@@ -20,6 +20,7 @@ interface AccessUser {
   email: string
   fullName: string | null
   isOwner: boolean
+  deactivatedAt: string | null
   roles: string[]
   managerIds: string[]
 }
@@ -54,6 +55,13 @@ watch(users, (list) => {
 
 const displayName = (user: AccessUser) => user.fullName || user.email
 
+// Deactivated people (someone who has left) are hidden unless asked for.
+const showDeactivated = ref(false)
+const deactivatedCount = computed(() => (users.value ?? []).filter(u => u.deactivatedAt).length)
+const visibleUsers = computed(() =>
+  (users.value ?? []).filter(u => showDeactivated.value || !u.deactivatedAt)
+)
+
 const sameSet = (a: string[], b: string[]) =>
   a.length === b.length && [...a].sort().join('|') === [...b].sort().join('|')
 
@@ -81,13 +89,40 @@ function toggleRole(user: AccessUser, roleKey: string, checked: boolean | 'indet
 // this too), and nobody can be their own manager.
 function managerItems(forUser: AccessUser) {
   return (users.value ?? [])
-    .filter(u => u.id !== forUser.id && u.roles.includes('manager'))
+    .filter(u => u.id !== forUser.id && !u.deactivatedAt && u.roles.includes('manager'))
     .map(u => ({ label: displayName(u), value: u.id }))
 }
 
-function errorText(err: unknown) {
-  const e = err as { data?: { statusMessage?: string }, statusMessage?: string, message?: string }
-  return e?.data?.statusMessage || e?.statusMessage || e?.message || 'Something went wrong.'
+/* ---- deactivate / reactivate (owner only; the server checks the rules) ---- */
+const deactivateTarget = ref<AccessUser | null>(null)
+const deactivateOpen = computed({
+  get: () => !!deactivateTarget.value,
+  set: (open: boolean) => {
+    if (!open) deactivateTarget.value = null
+  }
+})
+const changingActive = ref(false)
+
+async function setActive(user: AccessUser, active: boolean) {
+  changingActive.value = true
+  try {
+    await useApiFetch(`/api/admin/profiles/${user.id}/active`, { method: 'PUT', body: { active } })
+    toast.add({ title: `${displayName(user)} ${active ? 'reactivated' : 'deactivated'}`, color: 'success' })
+    deactivateTarget.value = null
+    // Other screens hold their own copy of the people lists.
+    await Promise.all([refresh(), refreshNuxtData('pending-users'), refreshNuxtData('leave-profile-dates')])
+    const fresh = users.value?.find(u => u.id === user.id)
+    if (fresh) drafts.value[user.id] = draftFrom(fresh)
+  } catch (err) {
+    toast.add({
+      title: active ? 'Could not reactivate' : 'Could not deactivate',
+      description: errorText(err),
+      color: 'error'
+    })
+    deactivateTarget.value = null
+  } finally {
+    changingActive.value = false
+  }
 }
 
 const savingId = ref<string | null>(null)
@@ -149,8 +184,15 @@ async function save(user: AccessUser) {
       No users have signed up yet.
     </p>
 
+    <UCheckbox
+      v-if="deactivatedCount"
+      v-model="showDeactivated"
+      class="mb-2"
+      :label="`Show deactivated people (${deactivatedCount})`"
+    />
+
     <div
-      v-for="user in users"
+      v-for="user in visibleUsers"
       :key="user.id"
       class="flex flex-wrap items-start justify-between gap-4 border-b border-default py-4 last:border-b-0"
     >
@@ -167,7 +209,16 @@ async function save(user: AccessUser) {
             Owner
           </UBadge>
           <UBadge
-            v-if="!user.roles.length"
+            v-if="user.deactivatedAt"
+            class="ml-1"
+            color="neutral"
+            variant="subtle"
+            size="sm"
+          >
+            Deactivated
+          </UBadge>
+          <UBadge
+            v-else-if="!user.roles.length"
             class="ml-1"
             color="warning"
             variant="subtle"
@@ -185,7 +236,21 @@ async function save(user: AccessUser) {
       </div>
 
       <div
-        v-if="drafts[user.id]"
+        v-if="user.deactivatedAt"
+        class="flex flex-1 justify-end"
+      >
+        <UButton
+          size="sm"
+          variant="outline"
+          label="Reactivate"
+          icon="i-lucide-user-check"
+          :loading="changingActive"
+          @click="setActive(user, true)"
+        />
+      </div>
+
+      <div
+        v-else-if="drafts[user.id]"
         class="flex flex-1 flex-wrap items-start justify-end gap-x-6 gap-y-3"
       >
         <div class="flex items-center gap-4 pt-1">
@@ -233,7 +298,47 @@ async function save(user: AccessUser) {
         >
           Save
         </UButton>
+        <UButton
+          v-if="!user.isOwner"
+          size="sm"
+          variant="ghost"
+          color="error"
+          icon="i-lucide-user-x"
+          label="Deactivate"
+          @click="deactivateTarget = user"
+        />
       </div>
     </div>
   </UCard>
+
+  <UModal
+    v-model:open="deactivateOpen"
+    :title="`Deactivate ${deactivateTarget ? displayName(deactivateTarget) : ''}?`"
+  >
+    <template #body>
+      <p class="text-sm">
+        They will no longer be able to use the intranet, and they disappear from people lists and manager choices.
+        Everything they have done (claims, leave, reports) is kept, and their pending items still reach their
+        managers. You can reactivate them at any time. This applies to every tool.
+      </p>
+    </template>
+    <template #footer>
+      <div class="flex w-full justify-end gap-2">
+        <UButton
+          label="Keep active"
+          color="neutral"
+          variant="outline"
+          :disabled="changingActive"
+          @click="deactivateTarget = null"
+        />
+        <UButton
+          label="Deactivate"
+          color="error"
+          icon="i-lucide-user-x"
+          :loading="changingActive"
+          @click="deactivateTarget && setActive(deactivateTarget, false)"
+        />
+      </div>
+    </template>
+  </UModal>
 </template>

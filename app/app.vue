@@ -11,6 +11,13 @@ useHead({
   }
 })
 
+// A person deactivated while the app is open (or whose profile arrives just after
+// sign-in) is moved to the "deactivated" page.
+const authStore = useAuthStore()
+watch(() => authStore.profile?.deactivatedAt, (deactivatedAt) => {
+  if (deactivatedAt && useRoute().path !== '/deactivated') navigateTo('/deactivated')
+})
+
 useSeoMeta({
   title: 'RHG Intranet',
   description: 'RHG internal portal - dashboard and company tools'
