@@ -18,9 +18,7 @@ async function submit() {
   try {
     if (mode.value === 'signin') {
       await authStore.signIn(form.email, form.password)
-      // A full page load (not an in-app switch) is what makes the browser
-      // offer to save the password. Safe since the login is a cookie (Step 14).
-      await navigateTo('/', { external: true })
+      await navigateTo('/')
     } else {
       await authStore.signUp(form.email, form.password, form.fullName)
       toast.add({
