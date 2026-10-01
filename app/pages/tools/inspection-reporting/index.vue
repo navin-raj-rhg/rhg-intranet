@@ -34,10 +34,17 @@ const shownTab = computed<TabValue>(() => (tabItems.value.some(t => t.value === 
       description="Product QC inspections at suppliers and DCs: checklists, photos and non-conformances, reviewed and closed by a reviewer."
     >
       <template
-        v-if="authStore.profile?.isOwner"
+        v-if="authStore.profile?.isOwner || role?.canCreate"
         #links
       >
         <UButton
+          v-if="role?.canCreate"
+          to="/tools/inspection-reporting/new"
+          icon="i-lucide-plus"
+          label="New inspection"
+        />
+        <UButton
+          v-if="authStore.profile?.isOwner"
           to="/tools/inspection-reporting/access"
           icon="i-lucide-users"
           variant="outline"

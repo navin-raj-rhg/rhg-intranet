@@ -310,7 +310,7 @@ export async function getInspectionReport(db: Db, id: number, userId: string, ro
     can: {
       edit: canEditInspection(report.status, roles, isAuthor),
       review: report.status === 'in_review' && inspectionTransitionProblem('in_review', 'closed', roles, isAuthor) === '',
-      delete: canDeleteInspection(roles)
+      delete: canDeleteInspection(report.status, roles, isAuthor)
     }
   }
 }
@@ -569,4 +569,38 @@ export async function inspectionPhotoUrls(db: Db, reportId: number): Promise<Rec
     urls[r.id] = await getDownloadUrl(r.r2Key, 900)
   }))
   return urls
+}
+
+/* ------------------------------------------------------------------ */
+/* Delete / discard                                                    */
+/* ------------------------------------------------------------------ */
+
+/** Delete a report with its points, photos and history. An inspector may only discard their own draft. */
+export async function deleteInspectionReport(db: Db, id: number, userId: string, roles: string[]) {
+  const [report] = await db
+    .select({ status: inspectionReports.status, createdBy: inspectionReports.createdBy })
+    .from(inspectionReports)
+    .where(eq(inspectionReports.id, id))
+  if (!report) throw new InspectionError(404, 'That inspection report no longer exists.')
+  if (!canDeleteInspection(report.status, roles, report.createdBy === userId)) {
+    throw new InspectionError(403, report.status === 'draft'
+      ? 'Only the inspector who started this draft (or an admin) can discard it.'
+      : 'Only an admin can delete a report that has been submitted.')
+  }
+
+  const photos = await db
+    .select({ r2Key: inspectionPhotos.r2Key })
+    .from(inspectionPhotos)
+    .innerJoin(inspectionReportPoints, eq(inspectionReportPoints.id, inspectionPhotos.reportPointId))
+    .where(eq(inspectionReportPoints.reportId, id))
+
+  // Only deletes while the status is still what we checked, so a report that has just been submitted is not lost.
+  const deleted = await db
+    .delete(inspectionReports)
+    .where(and(eq(inspectionReports.id, id), eq(inspectionReports.status, report.status)))
+    .returning({ id: inspectionReports.id })
+  if (!deleted[0]) throw new InspectionError(409, 'This report has just changed, so it was not deleted. Refresh the page.')
+
+  await Promise.all(photos.map(p => deleteObject(p.r2Key).catch(() => {})))
+  return { id }
 }

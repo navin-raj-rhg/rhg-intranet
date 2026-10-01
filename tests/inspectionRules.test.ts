@@ -68,9 +68,13 @@ test('who can edit a draft', () => {
 test('who can create and delete', () => {
   assert.ok(canCreateInspection(['inspector']))
   assert.ok(!canCreateInspection(['reviewer']))
-  assert.ok(canDeleteInspection(['admin']))
-  assert.ok(canDeleteInspection(['owner']))
-  assert.ok(!canDeleteInspection(['inspector', 'reviewer']))
+  assert.ok(canDeleteInspection('closed', ['admin'], false))
+  assert.ok(canDeleteInspection('in_review', ['owner'], false))
+  // an inspector can only discard their own draft
+  assert.ok(canDeleteInspection('draft', ['inspector'], true))
+  assert.ok(!canDeleteInspection('draft', ['inspector'], false))
+  assert.ok(!canDeleteInspection('in_review', ['inspector'], true))
+  assert.ok(!canDeleteInspection('draft', ['reviewer'], true))
 })
 
 test('status changes follow draft -> in review -> closed', () => {

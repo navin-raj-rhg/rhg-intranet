@@ -104,8 +104,10 @@ export function canCreateInspection(roles: string[]): boolean {
   return isInspectionInspector(roles) || isInspectionAdmin(roles)
 }
 
-export function canDeleteInspection(roles: string[]): boolean {
-  return isInspectionAdmin(roles)
+/** Admins delete any report; an inspector can discard their own draft. */
+export function canDeleteInspection(status: InspectionStatus, roles: string[], isAuthor: boolean): boolean {
+  if (isInspectionAdmin(roles)) return true
+  return status === 'draft' && isAuthor && isInspectionInspector(roles)
 }
 
 /** Plain-English problem with moving a report to another status, or '' if allowed. */

@@ -1,18 +1,15 @@
-import { eq } from 'drizzle-orm'
 import { useDb } from '~~/server/db/client'
-import { inspectionReports } from '~~/server/db/schema'
 import { requireToolRole } from '~~/server/utils/requireToolRole'
-import { INSPECTION_TOOL_ID, parseInspectionId } from '~~/server/utils/inspections'
+import { deleteInspectionReport, INSPECTION_ROLES, INSPECTION_TOOL_ID, inspectionHttpError, parseInspectionId } from '~~/server/utils/inspections'
 
-// Only admins (and the owner) delete a report, in any status. Its points,
-// photo records and history go with it (the photo files in R2 are left, as
-// with expense receipts - a Step 13 clean-up item).
+// An inspector can discard their own draft; admins (and the owner) can delete a
+// report in any status. Points, photo records and history go with it, and the
+// photo files in R2 are removed too (best effort).
 export default defineEventHandler(async (event) => {
-  await requireToolRole(event, INSPECTION_TOOL_ID, ['admin'])
-  const deleted = await useDb()
-    .delete(inspectionReports)
-    .where(eq(inspectionReports.id, parseInspectionId(event)))
-    .returning({ id: inspectionReports.id })
-  if (!deleted[0]) throw createError({ statusCode: 404, statusMessage: 'That inspection report no longer exists.' })
-  return deleted[0]
+  const { profile, roles } = await requireToolRole(event, INSPECTION_TOOL_ID, INSPECTION_ROLES)
+  try {
+    return await deleteInspectionReport(useDb(), parseInspectionId(event), profile.id, roles)
+  } catch (err) {
+    inspectionHttpError(err)
+  }
 })
