@@ -8,10 +8,13 @@ import {
   inspectionOverall,
   inspectionPhotoContentType,
   inspectionPhotoProblem,
+  inspectionProductsProblem,
+  inspectionProductsSummary,
   inspectionSubmitProblems,
   inspectionTemplateProblems,
   inspectionTransitionProblem,
   tallyInspectionPoints,
+  tidyInspectionProducts,
   type InspectionPointAnswer
 } from '../shared/utils/inspectionRules.ts'
 
@@ -117,4 +120,34 @@ test('photo content type: keeps what the phone sent, else guesses from the name'
   assert.equal(inspectionPhotoContentType('IMG_1.HEIC', ''), 'image/heic')
   assert.equal(inspectionPhotoContentType('notes.txt', ''), '')
   assert.equal(inspectionPhotoContentType('noext', ''), '')
+})
+
+test('products: tidied, blank rows dropped, order kept', () => {
+  const list = tidyInspectionProducts([
+    { productNo: '  P-100 ', description: '  Steel   clamp ' },
+    { productNo: '', description: '' },
+    { productNo: 'P-200', description: '   ' }
+  ])
+  assert.deepEqual(list, [
+    { productNo: 'P-100', description: 'Steel clamp' },
+    { productNo: 'P-200', description: null }
+  ])
+})
+
+test('products: problems are named in plain English', () => {
+  assert.equal(inspectionProductsProblem([]), '')
+  assert.equal(inspectionProductsProblem([{ productNo: 'P-1', description: 'x' }]), '')
+  assert.equal(inspectionProductsProblem([{ productNo: 'P-1' }, { productNo: '', description: 'orphan' }]), 'Product 2 needs a product number')
+  assert.equal(inspectionProductsProblem([{ productNo: 'P-1' }, { productNo: ' p-1 ' }]), 'Product p-1 is listed twice')
+  assert.match(inspectionProductsProblem([{ productNo: 'x'.repeat(101) }]), /100 characters/)
+  assert.match(inspectionProductsProblem([{ productNo: 'P-1', description: 'x'.repeat(501) }]), /500 characters/)
+  const many = Array.from({ length: 21 }, (_, i) => ({ productNo: `P-${i}` }))
+  assert.match(inspectionProductsProblem(many), /at most 20/)
+  assert.equal(inspectionProductsProblem(many.slice(0, 20)), '')
+})
+
+test('products summary for lists', () => {
+  assert.equal(inspectionProductsSummary([]), '')
+  assert.equal(inspectionProductsSummary(['P-100']), 'P-100')
+  assert.equal(inspectionProductsSummary(['P-100', 'P-200', 'P-300']), 'P-100 + 2 more')
 })

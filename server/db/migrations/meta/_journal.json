@@ -50,6 +50,13 @@
       "when": 1790788996058,
       "tag": "0006_harsh_proemial_gods",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790837390715,
+      "tag": "0007_short_mojo",
+      "breakpoints": true
     }
   ]
 }

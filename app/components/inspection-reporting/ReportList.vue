@@ -112,7 +112,7 @@ const filtered = computed(() => query.value !== '' || status.value !== 'all')
                 Report
               </th>
               <th class="hidden px-4 py-3 font-medium md:table-cell">
-                Product / reference
+                Products / reference
               </th>
               <th class="hidden px-4 py-3 font-medium lg:table-cell">
                 Inspector
@@ -145,16 +145,16 @@ const filtered = computed(() => query.value !== '' || status.value !== 'all')
                 <p class="text-xs text-muted">
                   #{{ r.id }} · {{ r.locationType === 'dc' ? 'DC' : 'Supplier' }} · {{ r.templateName }}
                   <span class="md:hidden">
-                    <template v-if="r.productNo"> · {{ r.productNo }}</template>
+                    <template v-if="r.productNos.length"> · {{ inspectionProductsSummary(r.productNos) }}</template>
                   </span>
                   <span class="sm:hidden"> · {{ formatDateMY(r.inspectionDate) }}</span>
                 </p>
               </td>
               <td class="hidden px-4 py-3 md:table-cell">
-                <template v-if="r.productNo || r.reference">
-                  {{ r.productNo }}
+                <template v-if="r.productNos.length || r.reference">
+                  <span :title="r.productNos.join(', ')">{{ inspectionProductsSummary(r.productNos) }}</span>
                   <span
-                    v-if="r.productNo && r.reference"
+                    v-if="r.productNos.length && r.reference"
                     class="text-dimmed"
                   > · </span>
                   {{ r.reference }}

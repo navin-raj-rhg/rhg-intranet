@@ -193,3 +193,47 @@ export function inspectionPhotoProblem(fileName: string, contentType: string, si
   if (sizeBytes > INSPECTION_PHOTO_MAX_BYTES) return `Photos must be ${INSPECTION_PHOTO_MAX_BYTES / 1024 / 1024} MB or smaller`
   return ''
 }
+
+// ---- Products ------------------------------------------------------------
+
+export const INSPECTION_MAX_PRODUCTS = 20
+export const INSPECTION_PRODUCT_NO_MAX = 100
+export const INSPECTION_PRODUCT_DESCRIPTION_MAX = 500
+
+/** A product being inspected: its number and (optionally) a description. */
+export interface InspectionProductInput {
+  productNo: string
+  description: string | null
+}
+
+/**
+ * The products as they will be saved: spaces tidied, rows with nothing in them
+ * dropped, blank descriptions turned into null. Order is kept.
+ */
+export function tidyInspectionProducts(products: { productNo: string, description?: string | null }[]): InspectionProductInput[] {
+  return products
+    .map(p => ({ productNo: tidyInspectionName(p.productNo), description: tidyInspectionName(p.description ?? '') || null }))
+    .filter(p => p.productNo !== '' || p.description !== null)
+}
+
+/** Plain-English first problem with a product list (after tidying), or '' if it's fine. */
+export function inspectionProductsProblem(products: { productNo: string, description?: string | null }[]): string {
+  const list = tidyInspectionProducts(products)
+  if (list.length > INSPECTION_MAX_PRODUCTS) return `A report can list at most ${INSPECTION_MAX_PRODUCTS} products`
+  const seen = new Set<string>()
+  for (const [i, p] of list.entries()) {
+    if (!p.productNo) return `Product ${i + 1} needs a product number`
+    if (p.productNo.length > INSPECTION_PRODUCT_NO_MAX) return `Product ${i + 1}: the product number must be ${INSPECTION_PRODUCT_NO_MAX} characters or fewer`
+    if ((p.description ?? '').length > INSPECTION_PRODUCT_DESCRIPTION_MAX) return `Product ${p.productNo}: the description must be ${INSPECTION_PRODUCT_DESCRIPTION_MAX} characters or fewer`
+    const key = p.productNo.toLowerCase()
+    if (seen.has(key)) return `Product ${p.productNo} is listed twice`
+    seen.add(key)
+  }
+  return ''
+}
+
+/** "P-100", "P-100 + 2 more", or '' - how a report's products are summarised in lists. */
+export function inspectionProductsSummary(productNos: string[]): string {
+  if (productNos.length === 0) return ''
+  return productNos.length === 1 ? productNos[0]! : `${productNos[0]} + ${productNos.length - 1} more`
+}

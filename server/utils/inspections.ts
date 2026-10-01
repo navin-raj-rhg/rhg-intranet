@@ -1,11 +1,13 @@
 import type { H3Event } from 'h3'
-import { and, asc, count, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, exists, ilike, inArray, or, sql } from 'drizzle-orm'
 import type { useDb } from '~~/server/db/client'
 import {
   inspectionEvents,
   inspectionLocations,
   inspectionPhotos,
+  inspectionProducts,
   inspectionReportPoints,
+  inspectionReportProducts,
   inspectionReports,
   inspectionTemplates,
   profiles
@@ -19,6 +21,8 @@ import {
   inspectionOverall,
   inspectionPhotoContentType,
   inspectionPhotoProblem,
+  inspectionProductsProblem,
+  tidyInspectionProducts,
   inspectionSubmitProblems,
   inspectionTransitionProblem,
   tallyInspectionPoints,
@@ -30,6 +34,7 @@ import {
 import type {
   InspectionListItem,
   InspectionListResponse,
+  InspectionProductSuggestion,
   InspectionLocationItem,
   InspectionReportView
 } from '~~/shared/types/inspection'
@@ -97,7 +102,14 @@ export async function listInspectionReports(db: Db, q: string, status: string, p
       ? or(
           ilike(inspectionReports.locationName, pattern),
           ilike(inspectionReports.templateName, pattern),
-          ilike(inspectionReports.productNo, pattern),
+          exists(
+            db.select({ one: sql`1` })
+              .from(inspectionReportProducts)
+              .where(and(
+                eq(inspectionReportProducts.reportId, inspectionReports.id),
+                or(ilike(inspectionReportProducts.productNo, pattern), ilike(inspectionReportProducts.description, pattern))
+              ))
+          ),
           ilike(inspectionReports.reference, pattern),
           sql`${inspectionReports.id}::text = ${term.replace(/^#/, '')}`
         )
@@ -118,7 +130,6 @@ export async function listInspectionReports(db: Db, q: string, status: string, p
       locationType: inspectionReports.locationType,
       locationName: inspectionReports.locationName,
       templateName: inspectionReports.templateName,
-      productNo: inspectionReports.productNo,
       reference: inspectionReports.reference,
       inspectionDate: inspectionReports.inspectionDate,
       overall: inspectionReports.overall,
@@ -143,6 +154,14 @@ export async function listInspectionReports(db: Db, q: string, status: string, p
         .where(inArray(inspectionReportPoints.reportId, rows.map(r => r.id)))
     : []
 
+  const productRows = rows.length
+    ? await db
+        .select({ reportId: inspectionReportProducts.reportId, productNo: inspectionReportProducts.productNo })
+        .from(inspectionReportProducts)
+        .where(inArray(inspectionReportProducts.reportId, rows.map(r => r.id)))
+        .orderBy(asc(inspectionReportProducts.sortOrder))
+    : []
+
   const items: InspectionListItem[] = rows.map((r) => {
     const tally = tallyInspectionPoints(points.filter(p => p.reportId === r.id))
     const final = r.status === 'closed'
@@ -152,7 +171,7 @@ export async function listInspectionReports(db: Db, q: string, status: string, p
       locationType: r.locationType,
       locationName: r.locationName,
       templateName: r.templateName,
-      productNo: r.productNo,
+      productNos: productRows.filter(pr => pr.reportId === r.id).map(pr => pr.productNo),
       reference: r.reference,
       inspectionDate: r.inspectionDate,
       overall: final ? r.overall : inspectionOverall(tally),
@@ -172,7 +191,7 @@ export async function listInspectionReports(db: Db, q: string, status: string, p
 export interface NewInspectionInput {
   locationId: number
   templateId: number
-  productNo: string | null
+  products: { productNo: string, description?: string | null }[]
   reference: string | null
   inspectionDate: string
   notes: string | null
@@ -181,6 +200,7 @@ export interface NewInspectionInput {
 /** Start a draft from a template: the template's sections and points are copied into the report. */
 export async function createInspectionReport(db: Db, userId: string, roles: string[], input: NewInspectionInput) {
   if (!canCreateInspection(roles)) throw new InspectionError(403, 'You need the Inspector role to start a report.')
+  const products = checkedProducts(input.products)
 
   const [location] = await db.select().from(inspectionLocations).where(eq(inspectionLocations.id, input.locationId))
   if (!location || !location.active) throw new InspectionError(400, 'Choose a supplier or DC from the list.')
@@ -196,7 +216,6 @@ export async function createInspectionReport(db: Db, userId: string, roles: stri
         locationName: location.name,
         templateId: template.id,
         templateName: template.name,
-        productNo: text(input.productNo),
         reference: text(input.reference),
         inspectionDate: input.inspectionDate,
         notes: text(input.notes),
@@ -216,6 +235,7 @@ export async function createInspectionReport(db: Db, userId: string, roles: stri
     if (pointRows.length === 0) throw new InspectionError(400, 'That template has no inspection points yet.')
     await tx.insert(inspectionReportPoints).values(pointRows)
     await tx.insert(inspectionEvents).values({ reportId: report.id, action: 'created', actorId: userId })
+    await saveReportProducts(tx, report.id, userId, products)
     return { id: report.id }
   })
 }
@@ -249,6 +269,11 @@ export async function getInspectionReport(db: Db, id: number, userId: string, ro
         .where(inArray(inspectionPhotos.reportPointId, pointRows.map(p => p.id)))
         .orderBy(asc(inspectionPhotos.id))
     : []
+  const productRows = await db
+    .select()
+    .from(inspectionReportProducts)
+    .where(eq(inspectionReportProducts.reportId, id))
+    .orderBy(asc(inspectionReportProducts.sortOrder))
   const eventRows = await db
     .select({
       id: inspectionEvents.id,
@@ -275,7 +300,7 @@ export async function getInspectionReport(db: Db, id: number, userId: string, ro
     locationType: report.locationType,
     locationName: report.locationName,
     templateName: report.templateName,
-    productNo: report.productNo,
+    products: productRows.map(p => ({ productNo: p.productNo, description: p.description })),
     reference: report.reference,
     inspectionDate: report.inspectionDate,
     notes: report.notes,
@@ -321,7 +346,7 @@ export async function getInspectionReport(db: Db, id: number, userId: string, ro
 
 export interface SaveInspectionInput {
   locationId: number
-  productNo: string | null
+  products: { productNo: string, description?: string | null }[]
   reference: string | null
   inspectionDate: string
   notes: string | null
@@ -330,6 +355,7 @@ export interface SaveInspectionInput {
 
 /** Save the header and every point answer of a draft in one go. */
 export async function saveInspectionDraft(db: Db, id: number, userId: string, roles: string[], input: SaveInspectionInput) {
+  const products = checkedProducts(input.products)
   return db.transaction(async (tx) => {
     const [report] = await tx.select().from(inspectionReports).where(eq(inspectionReports.id, id)).for('update')
     if (!report) throw new InspectionError(404, 'That inspection report no longer exists.')
@@ -366,13 +392,14 @@ export async function saveInspectionDraft(db: Db, id: number, userId: string, ro
         locationId,
         locationType,
         locationName,
-        productNo: text(input.productNo),
         reference: text(input.reference),
         inspectionDate: input.inspectionDate,
         notes: text(input.notes),
         updatedAt: new Date()
       })
       .where(eq(inspectionReports.id, id))
+
+    await saveReportProducts(tx, id, userId, products)
 
     for (const p of input.points) {
       await tx
@@ -466,6 +493,67 @@ export function tidyTemplateSections(sections: { name: string, points: { text: s
 export function isUniqueViolation(err: unknown): boolean {
   const e = err as { code?: string, cause?: { code?: string } }
   return e?.code === '23505' || e?.cause?.code === '23505'
+}
+
+/* ------------------------------------------------------------------ */
+/* Products                                                            */
+/* ------------------------------------------------------------------ */
+
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
+
+/** The tidied product list, or a 400 with the first problem. */
+function checkedProducts(products: { productNo: string, description?: string | null }[]) {
+  const problem = inspectionProductsProblem(products)
+  if (problem) throw new InspectionError(400, problem)
+  return tidyInspectionProducts(products)
+}
+
+/**
+ * Replace a report's products, and remember each one for next time: a product
+ * with a description updates the saved description (the latest wins); one with
+ * none keeps whatever description is already saved.
+ */
+async function saveReportProducts(tx: Tx, reportId: number, userId: string, products: { productNo: string, description: string | null }[]) {
+  await tx.delete(inspectionReportProducts).where(eq(inspectionReportProducts.reportId, reportId))
+  if (products.length === 0) return
+  await tx.insert(inspectionReportProducts).values(products.map((p, i) => ({
+    reportId,
+    productNo: p.productNo,
+    description: p.description,
+    sortOrder: i
+  })))
+
+  for (const p of products) {
+    const [updated] = p.description === null
+      ? []
+      : await tx
+          .update(inspectionProducts)
+          .set({ description: p.description, updatedBy: userId, updatedAt: new Date() })
+          .where(sql`lower(${inspectionProducts.productNo}) = lower(${p.productNo})`)
+          .returning({ id: inspectionProducts.id })
+    if (!updated) {
+      await tx
+        .insert(inspectionProducts)
+        .values({ productNo: p.productNo, description: p.description, updatedBy: userId })
+        .onConflictDoNothing()
+    }
+  }
+}
+
+/** Saved products whose number contains the text (numbers that start with it first), at most 10. */
+export async function findInspectionProducts(db: Db, q: string): Promise<InspectionProductSuggestion[]> {
+  const term = q.trim()
+  if (!term) return []
+  const escaped = term.replace(/[\\%_]/g, m => `\\${m}`)
+  return db
+    .select({ productNo: inspectionProducts.productNo, description: inspectionProducts.description })
+    .from(inspectionProducts)
+    .where(ilike(inspectionProducts.productNo, `%${escaped}%`))
+    .orderBy(
+      sql`case when ${inspectionProducts.productNo} ilike ${escaped + '%'} then 0 else 1 end`,
+      asc(inspectionProducts.productNo)
+    )
+    .limit(10)
 }
 
 /* ------------------------------------------------------------------ */

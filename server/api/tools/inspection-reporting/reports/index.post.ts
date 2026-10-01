@@ -1,12 +1,13 @@
 import { z } from 'zod'
 import { useDb } from '~~/server/db/client'
 import { requireToolRole } from '~~/server/utils/requireToolRole'
+import { productsBodySchema } from '~~/server/utils/inspectionProductsBody'
 import { createInspectionReport, INSPECTION_ROLES, INSPECTION_TOOL_ID, inspectionHttpError } from '~~/server/utils/inspections'
 
 const bodySchema = z.object({
   locationId: z.number({ message: 'Choose a supplier or DC' }).int().positive('Choose a supplier or DC'),
   templateId: z.number({ message: 'Choose a report template' }).int().positive('Choose a report template'),
-  productNo: z.string().max(100).nullable().optional(),
+  products: productsBodySchema.optional(),
   reference: z.string().max(100).nullable().optional(),
   inspectionDate: z.string({ message: 'Enter the inspection date' }).regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the inspection date'),
   notes: z.string().max(4000).nullable().optional()
@@ -23,7 +24,7 @@ export default defineEventHandler(async (event) => {
   try {
     return await createInspectionReport(useDb(), profile.id, roles, {
       ...parsed.data,
-      productNo: parsed.data.productNo ?? null,
+      products: parsed.data.products ?? [],
       reference: parsed.data.reference ?? null,
       notes: parsed.data.notes ?? null
     })

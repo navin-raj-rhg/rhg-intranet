@@ -34,7 +34,7 @@ const templateItems = computed(() => templates.value.map(t => ({ label: t.name, 
 
 const locationId = ref<number | undefined>()
 const templateId = ref<number | undefined>(undefined)
-const productNo = ref('')
+const products = ref<InspectionProductRow[]>([blankInspectionProductRow()])
 const reference = ref('')
 const dateText = ref(formatDateMY(todayMY()))
 const notes = ref('')
@@ -50,6 +50,8 @@ async function start() {
   if (templateId.value === undefined) return toast.add({ title: 'Choose a report template', color: 'warning' })
   const iso = parseDateMY(dateText.value)
   if (!iso) return toast.add({ title: 'Enter the inspection date as dd/mm/yyyy', color: 'warning' })
+  const productProblem = inspectionProductsProblem(inspectionProductsPayload(products.value))
+  if (productProblem) return toast.add({ title: productProblem, color: 'warning' })
 
   saving.value = true
   try {
@@ -58,7 +60,7 @@ async function start() {
       body: {
         locationId: locationId.value,
         templateId: templateId.value,
-        productNo: productNo.value.trim() || null,
+        products: inspectionProductsPayload(products.value),
         reference: reference.value.trim() || null,
         inspectionDate: iso,
         notes: notes.value.trim() || null
@@ -139,14 +141,6 @@ async function start() {
             data-testid="new-template"
           />
         </UFormField>
-        <UFormField label="Product number">
-          <UInput
-            v-model="productNo"
-            maxlength="100"
-            class="w-full"
-            data-testid="new-product"
-          />
-        </UFormField>
         <UFormField label="PO / reference">
           <UInput
             v-model="reference"
@@ -168,6 +162,13 @@ async function start() {
           />
         </UFormField>
       </div>
+      <UFormField
+        label="Products inspected"
+        class="mt-4"
+        help="Add every product this report covers. A saved product fills in its description."
+      >
+        <InspectionReportingProductsInput v-model="products" />
+      </UFormField>
       <UFormField
         label="Notes"
         class="mt-4"

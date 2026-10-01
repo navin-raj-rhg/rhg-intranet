@@ -43,7 +43,7 @@ const { data: allLocations } = await useAsyncData('inspection-report-locations',
 
 const header = reactive({
   locationId: undefined as number | undefined,
-  productNo: '',
+  products: [] as InspectionProductRow[],
   reference: '',
   dateText: '',
   notes: ''
@@ -58,7 +58,8 @@ const snapshot = () => JSON.stringify({
 
 function load(r: InspectionReportView) {
   header.locationId = r.locationId ?? undefined
-  header.productNo = r.productNo ?? ''
+  header.products = inspectionProductRowsFrom(r.products)
+  if (r.can.edit && header.products.length === 0) header.products.push(blankInspectionProductRow())
   header.reference = r.reference ?? ''
   header.dateText = formatDateMY(r.inspectionDate)
   header.notes = r.notes ?? ''
@@ -204,13 +205,18 @@ async function save(quiet = false): Promise<boolean> {
     toast.add({ title: 'Choose a supplier or DC', color: 'warning' })
     return false
   }
+  const productProblem = inspectionProductsProblem(inspectionProductsPayload(header.products))
+  if (productProblem) {
+    toast.add({ title: productProblem, color: 'warning' })
+    return false
+  }
   saving.value = true
   try {
     await useApiFetch(api, {
       method: 'PUT',
       body: {
         locationId: header.locationId,
-        productNo: header.productNo.trim() || null,
+        products: inspectionProductsPayload(header.products),
         reference: header.reference.trim() || null,
         inspectionDate: iso,
         notes: header.notes.trim() || null,
@@ -409,14 +415,6 @@ async function discard() {
             data-testid="edit-date"
           />
         </UFormField>
-        <UFormField label="Product number">
-          <UInput
-            v-model="header.productNo"
-            maxlength="100"
-            class="w-full"
-            data-testid="edit-product"
-          />
-        </UFormField>
         <UFormField label="PO / reference">
           <UInput
             v-model="header.reference"
@@ -424,6 +422,13 @@ async function discard() {
             class="w-full"
             data-testid="edit-reference"
           />
+        </UFormField>
+        <UFormField
+          label="Products inspected"
+          class="sm:col-span-2"
+          help="Add every product this report covers. A saved product fills in its description."
+        >
+          <InspectionReportingProductsInput v-model="header.products" />
         </UFormField>
         <UFormField
           label="Notes"
@@ -460,18 +465,37 @@ async function discard() {
         </div>
         <div>
           <dt class="text-muted">
-            Product number
-          </dt>
-          <dd class="font-medium">
-            {{ report.productNo || '-' }}
-          </dd>
-        </div>
-        <div>
-          <dt class="text-muted">
             PO / reference
           </dt>
           <dd class="font-medium">
             {{ report.reference || '-' }}
+          </dd>
+        </div>
+        <div class="col-span-2 sm:col-span-4">
+          <dt class="text-muted">
+            Products inspected
+          </dt>
+          <dd
+            v-if="report.products.length"
+            class="space-y-0.5"
+            data-testid="product-list"
+          >
+            <p
+              v-for="p in report.products"
+              :key="p.productNo"
+            >
+              <span class="font-medium">{{ p.productNo }}</span>
+              <span
+                v-if="p.description"
+                class="text-muted"
+              > - {{ p.description }}</span>
+            </p>
+          </dd>
+          <dd
+            v-else
+            class="font-medium"
+          >
+            -
           </dd>
         </div>
         <div

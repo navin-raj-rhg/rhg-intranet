@@ -77,6 +77,7 @@ export const inspectionReports = pgTable(
     locationName: text('location_name').notNull(),
     templateId: integer('template_id').references(() => inspectionTemplates.id, { onDelete: 'set null' }),
     templateName: text('template_name').notNull(),
+    // Superseded by inspection_report_products (migration 0007); no longer read or written.
     productNo: text('product_no'),
     reference: text('reference'), // PO / reference, free text
     inspectionDate: date('inspection_date').notNull(),
@@ -157,4 +158,37 @@ export const inspectionEvents = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
   },
   table => [index('inspection_events_report_idx').on(table.reportId)]
+)
+
+/**
+ * Products RHG has inspected, so typing a product number recalls its
+ * description next time. Updated whenever a report is saved with a description
+ * (the latest one wins); old reports keep the description they were written with.
+ */
+export const inspectionProducts = pgTable(
+  'inspection_products',
+  {
+    id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+    productNo: text('product_no').notNull(),
+    description: text('description'),
+    updatedBy: uuid('updated_by').references(() => profiles.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+  },
+  table => [uniqueIndex('inspection_products_no_ci_unique').on(sql`lower(${table.productNo})`)]
+)
+
+/** The products one report covers: frozen copies of the number and description, in the order entered. */
+export const inspectionReportProducts = pgTable(
+  'inspection_report_products',
+  {
+    id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+    reportId: integer('report_id')
+      .notNull()
+      .references(() => inspectionReports.id, { onDelete: 'cascade' }),
+    productNo: text('product_no').notNull(),
+    description: text('description'),
+    sortOrder: integer('sort_order').notNull()
+  },
+  table => [index('inspection_report_products_report_idx').on(table.reportId)]
 )

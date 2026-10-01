@@ -29,7 +29,8 @@ export interface InspectionListItem {
   locationType: InspectionLocationType
   locationName: string
   templateName: string
-  productNo: string | null
+  /** Product numbers on the report, in the order entered. */
+  productNos: string[]
   reference: string | null
   inspectionDate: string
   overall: InspectionOverall | null
@@ -64,7 +65,7 @@ export interface InspectionReportView {
   locationType: InspectionLocationType
   locationName: string
   templateName: string
-  productNo: string | null
+  products: InspectionProductView[]
   reference: string | null
   inspectionDate: string
   notes: string | null
@@ -96,4 +97,15 @@ export interface InspectionTemplateResponse {
   active: boolean
   sections: { name: string, points: { text: string }[] }[]
   updatedAt: string
+}
+
+export interface InspectionProductView {
+  productNo: string
+  description: string | null
+}
+
+/** A saved product offered while typing a product number. */
+export interface InspectionProductSuggestion {
+  productNo: string
+  description: string | null
 }

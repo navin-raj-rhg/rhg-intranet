@@ -24,7 +24,8 @@ const emit = defineEmits<{
   removePhoto: [photoId: number]
 }>()
 
-const fileInput = ref<HTMLInputElement>()
+const libraryInput = ref<HTMLInputElement>()
+const cameraInput = ref<HTMLInputElement>()
 const brokenPhotos = ref<Record<number, boolean>>({})
 
 /* ---- answer buttons ---- */
@@ -227,10 +228,21 @@ function picked(event: Event) {
       </div>
 
       <template v-if="!readonly">
+        <!-- Camera: opens the phone's camera straight away (on a computer it opens the normal file box). -->
         <input
-          ref="fileInput"
+          ref="cameraInput"
           type="file"
-          accept="image/jpeg,image/png,image/heic,image/heif"
+          accept="image/*"
+          capture="environment"
+          class="hidden"
+          data-testid="photo-camera-input"
+          @change="picked"
+        >
+        <!-- Library: pick one or more existing photos. -->
+        <input
+          ref="libraryInput"
+          type="file"
+          accept="image/*"
           multiple
           class="hidden"
           data-testid="photo-input"
@@ -240,9 +252,19 @@ function picked(event: Event) {
           variant="outline"
           color="neutral"
           icon="i-lucide-camera"
-          :label="point.photos.length ? 'Add more' : 'Add photos'"
+          label="Take photo"
           :loading="uploading"
-          @click="fileInput?.click()"
+          data-testid="take-photo"
+          @click="cameraInput?.click()"
+        />
+        <UButton
+          variant="outline"
+          color="neutral"
+          icon="i-lucide-images"
+          label="Choose photos"
+          :disabled="uploading"
+          data-testid="choose-photos"
+          @click="libraryInput?.click()"
         />
       </template>
     </div>
