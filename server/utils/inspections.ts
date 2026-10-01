@@ -22,13 +22,17 @@ import {
   inspectionSubmitProblems,
   inspectionTransitionProblem,
   tallyInspectionPoints,
-  type InspectionLocationType,
-  type InspectionOverall,
   type InspectionPointResult,
   type InspectionSeverity,
-  type InspectionStatus,
-  type InspectionTally
+  type InspectionStatus
 } from '~~/shared/utils/inspectionRules'
+
+import type {
+  InspectionListItem,
+  InspectionListResponse,
+  InspectionLocationItem,
+  InspectionReportView
+} from '~~/shared/types/inspection'
 
 type Db = ReturnType<typeof useDb>
 
@@ -65,13 +69,6 @@ export function parseInspectionId(event: H3Event, what = 'inspection report', pa
 /* Suppliers and DCs                                                   */
 /* ------------------------------------------------------------------ */
 
-export interface InspectionLocationItem {
-  id: number
-  type: InspectionLocationType
-  name: string
-  active: boolean
-}
-
 export async function listInspectionLocations(db: Db, includeInactive: boolean): Promise<InspectionLocationItem[]> {
   const rows = await db
     .select({
@@ -91,28 +88,6 @@ export async function listInspectionLocations(db: Db, includeInactive: boolean):
 /* ------------------------------------------------------------------ */
 /* Reports: list                                                       */
 /* ------------------------------------------------------------------ */
-
-export interface InspectionListItem {
-  id: number
-  status: InspectionStatus
-  locationType: InspectionLocationType
-  locationName: string
-  templateName: string
-  productNo: string | null
-  reference: string | null
-  inspectionDate: string
-  overall: InspectionOverall | null
-  overallIsFinal: boolean
-  nonConformances: number
-  createdByName: string
-}
-
-export interface InspectionListResponse {
-  items: InspectionListItem[]
-  total: number
-  page: number
-  pageSize: number
-}
 
 export async function listInspectionReports(db: Db, q: string, status: string, page: number): Promise<InspectionListResponse> {
   const term = q.trim()
@@ -248,42 +223,6 @@ export async function createInspectionReport(db: Db, userId: string, roles: stri
 /* ------------------------------------------------------------------ */
 /* Reports: open one                                                   */
 /* ------------------------------------------------------------------ */
-
-export interface InspectionPointView {
-  id: number
-  sectionName: string
-  sectionOrder: number
-  pointText: string
-  pointOrder: number
-  result: InspectionPointResult | null
-  severity: InspectionSeverity | null
-  comment: string | null
-  photos: { id: number, fileName: string, sizeBytes: number }[]
-}
-
-export interface InspectionReportView {
-  id: number
-  status: InspectionStatus
-  locationId: number | null
-  locationType: InspectionLocationType
-  locationName: string
-  templateName: string
-  productNo: string | null
-  reference: string | null
-  inspectionDate: string
-  notes: string | null
-  createdByName: string
-  createdAt: string
-  updatedAt: string
-  overall: InspectionOverall
-  overallIsFinal: boolean
-  tally: InspectionTally
-  hasNonConformance: boolean
-  submitProblems: string[]
-  points: InspectionPointView[]
-  events: { id: number, action: string, actorName: string, comment: string | null, createdAt: string }[]
-  can: { edit: boolean, review: boolean, delete: boolean }
-}
 
 export async function getInspectionReport(db: Db, id: number, userId: string, roles: string[]): Promise<InspectionReportView | null> {
   const [r] = await db
