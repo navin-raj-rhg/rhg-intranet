@@ -12,7 +12,8 @@ import {
   inspectionTemplates,
   profiles
 } from '~~/server/db/schema'
-import { buildObjectKey, deleteObject, getDownloadUrl, getUploadUrl, headObjectSize } from '~~/server/utils/r2'
+import { buildObjectKey, deleteObject, getDownloadUrl, getObjectBuffer, getUploadUrl, headObjectSize } from '~~/server/utils/r2'
+import type { InspectionPdfPhoto } from '~~/server/utils/generateInspectionReportPdf'
 import {
   canCreateInspection,
   canDeleteInspection,
@@ -691,4 +692,43 @@ export async function deleteInspectionReport(db: Db, id: number, userId: string,
 
   await Promise.all(photos.map(p => deleteObject(p.r2Key).catch(() => {})))
   return { id }
+}
+
+/* ------------------------------------------------------------------ */
+/* PDF photos                                                          */
+/* ------------------------------------------------------------------ */
+
+/** Total picture data allowed in one PDF; photos beyond it are listed but not drawn. */
+const PDF_PHOTO_BUDGET_BYTES = 80 * 1024 * 1024
+
+/** The pictures for a report's PDF. The PDF can only show JPEG and PNG, and only up to the size budget. */
+export async function loadInspectionPdfPhotos(db: Db, reportId: number): Promise<Map<number, InspectionPdfPhoto>> {
+  const rows = await db
+    .select({
+      id: inspectionPhotos.id,
+      r2Key: inspectionPhotos.r2Key,
+      fileName: inspectionPhotos.fileName,
+      contentType: inspectionPhotos.contentType,
+      sizeBytes: inspectionPhotos.sizeBytes
+    })
+    .from(inspectionPhotos)
+    .innerJoin(inspectionReportPoints, eq(inspectionReportPoints.id, inspectionPhotos.reportPointId))
+    .where(eq(inspectionReportPoints.reportId, reportId))
+    .orderBy(asc(inspectionPhotos.id))
+
+  const photos = new Map<number, InspectionPdfPhoto>()
+  let budget = PDF_PHOTO_BUDGET_BYTES
+  for (const r of rows) {
+    const entry: InspectionPdfPhoto = { buffer: null, contentType: r.contentType, fileName: r.fileName }
+    if ((r.contentType === 'image/jpeg' || r.contentType === 'image/png') && r.sizeBytes <= budget) {
+      try {
+        entry.buffer = await getObjectBuffer(r.r2Key)
+        budget -= r.sizeBytes
+      } catch {
+        entry.buffer = null // shown as "not shown in the PDF" rather than failing the whole report
+      }
+    }
+    photos.set(r.id, entry)
+  }
+  return photos
 }

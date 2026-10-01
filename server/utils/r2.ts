@@ -112,3 +112,10 @@ export async function headObjectSize(key: string): Promise<number | null> {
 export async function deleteObject(key: string) {
   await useR2().send(new DeleteObjectCommand({ Bucket: r2Bucket(), Key: key }))
 }
+
+/** Reads a stored object fully into memory (for files we embed in generated documents). */
+export async function getObjectBuffer(key: string): Promise<Buffer> {
+  const res = await useR2().send(new GetObjectCommand({ Bucket: r2Bucket(), Key: key }))
+  if (!res.Body) throw new Error('Empty response from storage.')
+  return Buffer.from(await res.Body.transformToByteArray())
+}

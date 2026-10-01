@@ -348,6 +348,30 @@ async function review() {
   }
 }
 
+/* ---- PDF ---- */
+
+const downloadingPdf = ref(false)
+
+async function downloadPdf() {
+  downloadingPdf.value = true
+  try {
+    // The API needs the login header, so a plain link can't be used: fetch the file, then save it.
+    const blob = await useApiFetch<Blob>(`${api}/pdf`, { responseType: 'blob' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `inspection-${props.reportId}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  } catch (err) {
+    toast.add({ title: 'Could not create the PDF', description: errorText(err), color: 'error' })
+  } finally {
+    downloadingPdf.value = false
+  }
+}
+
 /* ---- delete: discard a draft, or an admin deleting a report ---- */
 
 const discardOpen = ref(false)
@@ -399,8 +423,18 @@ async function discard() {
         :label="INSPECTION_OVERALL_LABELS[overall]"
       />
       <UButton
-        v-if="report.can.delete"
         class="ml-auto"
+        size="sm"
+        variant="outline"
+        color="neutral"
+        icon="i-lucide-file-down"
+        label="Download PDF"
+        :loading="downloadingPdf"
+        data-testid="download-pdf"
+        @click="downloadPdf"
+      />
+      <UButton
+        v-if="report.can.delete"
         size="sm"
         variant="ghost"
         color="error"
