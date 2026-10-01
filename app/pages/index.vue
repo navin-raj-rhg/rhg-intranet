@@ -38,6 +38,27 @@ const pendingSummary = computed(() => {
   return names.length > 3 ? `${shown} and ${names.length - 3} more` : shown
 })
 
+// Managers (and the owner): expense claims and leave waiting for approval.
+const { data: approvals } = await useAsyncData('pending-approvals', () =>
+  useApiFetch<{ expenseClaims: number, leave: number }>('/api/dashboard/pending-approvals')
+    .catch(() => ({ expenseClaims: 0, leave: 0 }))
+)
+
+const approvalItems = computed(() => {
+  const items: { id: string, route: string, text: string }[] = []
+  const claims = approvals.value?.expenseClaims ?? 0
+  const leave = approvals.value?.leave ?? 0
+  const expenseTool = (tools ?? []).find(t => t.id === 'expense-claims')
+  const leaveTool = (tools ?? []).find(t => t.id === 'leave-applications')
+  if (claims && expenseTool) {
+    items.push({ id: expenseTool.id, route: expenseTool.route, text: `${claims} expense ${claims === 1 ? 'claim' : 'claims'}` })
+  }
+  if (leave && leaveTool) {
+    items.push({ id: leaveTool.id, route: leaveTool.route, text: `${leave} leave ${leave === 1 ? 'application' : 'applications'}` })
+  }
+  return items
+})
+
 async function claimOwner() {
   claimingOwner.value = true
   try {
@@ -100,6 +121,27 @@ async function claimOwner() {
           :to="`${tool.route}/access`"
         >
           Assign access in {{ tool.name }}
+        </UButton>
+      </template>
+    </UAlert>
+
+    <UAlert
+      v-if="approvalItems.length"
+      class="mt-6"
+      color="warning"
+      variant="subtle"
+      icon="i-lucide-clipboard-check"
+      title="Waiting for your approval"
+      :description="approvalItems.map(i => i.text).join(' and ')"
+    >
+      <template #actions>
+        <UButton
+          v-for="item in approvalItems"
+          :key="item.id"
+          size="sm"
+          :to="item.route"
+        >
+          Review {{ item.id === 'leave-applications' ? 'leave' : 'expense claims' }}
         </UButton>
       </template>
     </UAlert>
