@@ -1094,3 +1094,67 @@ pass. Claude checked with `curl` that a signed-out request for a page returns 30
 /login, /login returns 200, and an API call returns 401. Everything needing a real
 login (all tools, several accounts, refresh, sign-out, closing and reopening the
 browser) was tested by Navin.
+
+## Step 15: sign-up restricted to company email addresses
+
+Strangers who find the URL can no longer create an account. Only email addresses on an
+allowed list can sign up. Built in sub-steps 15.2 to 15.5 with Claude Code; Navin tested
+each stop.
+
+### How it fits together
+
+- **The real protection is in the database.** `server/db/manual-sql/008_signup_domain_guard.sql`
+  creates the table `allowed_signup_emails` and a trigger on `auth.users` that rejects any
+  new account whose email is not on the list. The browser cannot get around it.
+- **The list:** each entry is either a whole domain (`ttfs.com.au`) or one exact address
+  (`contractor@other.com`). It starts with `rapidhardwaregroup.com.au` and `ttfs.com.au`.
+  Case and spaces never matter; sub-domains and look-alikes (`mail.ttfs.com.au`,
+  `ttfs.com.au.evil.com`) do not match. The table is private (row level security on, no
+  policies), so only the SQL editor and the trigger can read or change it.
+- **Same rule in code:** `shared/utils/signupRules.ts` (`isSignupEmailAllowed`,
+  `signupNotAllowedMessage`, tested in `tests/signupRules.test.ts`). The login page does
+  not block anything itself, because it cannot see single-address exceptions; it only
+  turns Supabase's generic "Database error saving new user" into "Sign-up is limited to RHG
+  email addresses (@rapidhardwaregroup.com.au or @ttfs.com.au)...".
+- **Login page:** the sign-up heading says to use your RHG email address, and the
+  boxes now carry `name` / `autocomplete` settings (username, current-password,
+  new-password) so password managers recognise the form.
+- **Existing accounts are untouched**; only new accounts are checked.
+
+### Managing the list (SQL editor)
+
+```sql
+insert into public.allowed_signup_emails (entry) values ('person@other.com'); -- one address
+insert into public.allowed_signup_emails (entry) values ('newdomain.com.au'); -- a whole domain
+delete from public.allowed_signup_emails where entry = 'newdomain.com.au';    -- stop allowing it
+```
+
+### One-time setup
+
+1. Run `008_signup_domain_guard.sql` once in the Supabase SQL editor (safe to re-run).
+2. In Supabase, Authentication -> Sign In / Providers -> Email, switch **Confirm email**
+   ON. Without it, anyone could sign up as someone else's company address without owning
+   the mailbox, which would defeat the domain check.
+3. No migration, no new package.
+
+### Known limitations
+
+- **The guard also blocks accounts added by hand** in Authentication -> Users -> Add user,
+  because the database cannot tell those from sign-ups. To add an outsider, add their
+  address to the list first.
+- The list is edited by SQL only; there is no screen for it.
+- Confirmation emails are sent by Supabase's built-in mail service, which is meant for
+  testing: a very low hourly limit, a generic sender and template, and it may only deliver
+  to your Supabase team's addresses. A real mail provider (custom SMTP) is needed before
+  company-wide use (Step 17). Tested: a confirmation email to a company address took several
+  minutes to arrive, from "Supabase Auth <noreply@mail.app.supabase.io>".
+- Email/password sign-up is still open to the allowed domains; whether it stays once
+  Microsoft SSO exists is a Step 16 decision.
+- Edge did not offer to save the password after signing in on the live site (even with
+  Bitwarden off). Forcing a full page load after sign-in was tried and reverted because it
+  made the dashboard slow. Saving the login by hand in the browser works.
+
+**Verified:** `pnpm lint`, `pnpm typecheck` and `pnpm test` (134 tests) pass. Claude checked
+the login page's input settings and the new sign-up heading in the browser pane. The
+database guard, the refusal message on the live site and the confirmation email need the
+real Supabase and were tested by Navin.

@@ -1,4 +1,4 @@
-# RHG Intranet — Project Status (updated through Step 14)
+# RHG Intranet — Project Status (updated through Step 15)
 
 > **Where this lives:** `docs/project-status.md` in the repo is the source of
 > truth (Claude Code reads it via `CLAUDE.md`). Navin may also keep a copy in
@@ -15,7 +15,7 @@ live URL.
 **Numbering convention (use this when talking to Claude):** everything is a
 numbered **Step** (Step 1 ... Step 17 below), with sub-steps like 10.4. The
 **Phases** group the steps. Refer to work by step number, e.g. "let's do
-Step 14" or "back to 11.8b". Steps 1-14 are done; Steps 15+ are the agreed
+Step 15" or "back to 11.8b". Steps 1-15 are done; Steps 16+ are the agreed
 roadmap and have not been started.
 
 ## Live demo
@@ -123,7 +123,7 @@ The short version of these rules is in `CLAUDE.md` at the repo root.
 - **File storage:** Cloudflare R2 (S3-compatible), accessed via presigned URLs
 - **PDF generation:** `pdfkit` (expense-claims payroll report; inspection reports)
 - **Tests:** `pnpm test` runs Node's built-in test runner over `tests/*.test.ts`
-  (pure logic only, no database) - **128 tests as of Step 14**.
+  (pure logic only, no database) - **134 tests as of Step 15**.
 - **Package manager:** pnpm
 - **Hosting:** Railway (Node server), auto-deploying from `main`
 
@@ -239,6 +239,7 @@ pattern spreads.
 | 12. Inspection Reporting | ✅ Done (12.1-12.12) | Product QC inspections at suppliers/DCs: admin-built templates, phone-first checklist with photos and Minor/Major non-conformances, calculated result, review and close, saved products, PDF (see below) |
 | 13. Styling and clean-ups | ✅ Done (13.2-13.13) | RHG look, loading bar and faster requests, manager approvals banner, deactivate user, leave public holidays, cost model PDF and Setup tab, storage clean-up, many small fixes (see below) |
 | 14. Cookie-based sessions | ✅ Done (14.1-14.7) | `@supabase/ssr` cookies instead of the Bearer header, server-side redirect of signed-out page requests (see below) |
+| 15. Sign-up restriction | ✅ Done (15.1-15.5) | Only allowed company email domains (or listed single addresses) can create an account; enforced in the database (see below) |
 
 ### Step 11: Cost Modelling (complete)
 
@@ -514,6 +515,41 @@ again.
 - Claude could not sign in to the real Supabase; it checked build, tests and the signed-out
   redirect with `curl`, and Navin tested the signed-in behaviour with several accounts.
 
+### Step 15: Sign-up restricted to company email addresses (complete)
+
+Sub-steps: 15.1 decisions, 15.2 rule + tests, 15.3 database guard (manual SQL 008), 15.4 login
+page (15.4b/c: a full-page reload after sign-in was tried for the password-save prompt and
+reverted), 15.5 Confirm email and docs. Committed and pushed when Navin asked. The repo
+`README.md` has the write-up.
+
+**Decisions (Navin's, all as recommended):** allowed domains `rapidhardwaregroup.com.au` and
+`ttfs.com.au`; the list lives in a database table edited by SQL; single outside addresses can
+be allowed too; **Confirm email** switched ON in Supabase (this step, not left to Step 17);
+still built even though Microsoft SSO (Step 16) may make it largely automatic.
+
+**How it works:** table `allowed_signup_emails` (entry = a domain or one exact address) plus a
+trigger `check_signup_email_allowed` on `auth.users` that rejects other addresses
+(`server/db/manual-sql/008_signup_domain_guard.sql`, safe to re-run). The same rule is in
+`shared/utils/signupRules.ts` (6 tests). The login page does not pre-block (it cannot see
+single-address exceptions); it shows "Sign-up is limited to RHG email addresses..." when the
+database refuses. Its inputs also now have `name` / `autocomplete` settings. No migration.
+
+**Changed from the plan:** the guard also blocks accounts added by hand in Supabase's dashboard
+(the database cannot tell them apart). To add an outsider, insert their address into the list
+first.
+
+**Known limitations (acceptable for the demo):**
+- The list is edited by SQL only; no screen.
+- Confirmation emails come from Supabase's built-in sender (testing-grade: low hourly limit,
+  generic sender, may only reach Supabase team addresses). Custom SMTP needed before company-wide
+  use (Step 17). Tested by Navin: the confirmation email took several minutes to arrive, from
+  "Supabase Auth <noreply@mail.app.supabase.io>".
+- `isSignupEmailAllowed` is tested but not yet used by a screen (kept for Step 16).
+- Edge did not offer to save the password after signing in on the live site, even with Bitwarden
+  off; Navin saved it by hand. Not a site fault as far as we could tell.
+- Claude could not sign in or sign up against the real Supabase; Navin tested the refusal and
+  the confirmation email.
+
 ## Step 9 reference (still true)
 
 - Expense-claims specifics: categories are a fixed 7-value enum shared via
@@ -540,12 +576,9 @@ README's Step 10 section.
 
 ## Known Limitations (acceptable for demo, flagged to revisit before company-wide launch)
 
-- **Anyone with the URL can still sign up.** They see nothing until the owner
-  assigns a role (and appear in the dashboard banner), but sign-up should be
-  restricted to company email addresses before rollout. Email confirmation in
-  Supabase (Authentication → Configuration → Sign In / Providers → Email →
-  Confirm email) should be ON for launch; the confirmation link redirects to
-  the configured Site URL (the Railway address).
+- **Sign-up is limited to the allowed company domains (Step 15)**; others are refused by the
+  database. Confirm email is ON in Supabase; the link redirects to the configured Site URL
+  (the Railway address). Supabase's built-in mail sender is testing-grade - see Step 17.
 - **The new-sign-up alert is in-app only** - no email/push.
 - **Deleting an auth user who has claim/payroll/leave/cost-model history**
   removes their login but keeps their profile row (deliberate, so history isn't
@@ -575,12 +608,12 @@ README's Step 10 section.
 - No Microsoft SSO yet - planned before company-wide launch.
 - `NUXT_SUPABASE_DB_URL` (direct connection) is intentionally not set on
   Railway - migrations must be run manually from a local machine after any
-  schema change; a push alone does not apply them (latest: `0011`; Step 14 added none). **Order for a
+  schema change; a push alone does not apply them (latest: `0011`; Steps 14 and 15 added none). **Order for a
   release with a migration that ADDS something: run `pnpm db:migrate` first, then push**
   (the code needs the new tables or columns). **When a migration DROPS something, push
   first, wait for the deploy, then migrate** (as with `0011`). Manual SQL in `server/db/manual-sql/` (001 new-user trigger, 002
   expense-claims seed, 003 deleted-user trigger, 004 leave seed, 005 leave
-  entitlements, 006 cost modelling seed, 007 inspection reporting seed) is run by
+  entitlements, 006 cost modelling seed, 007 inspection reporting seed, 008 sign-up domain guard) is run by
   hand in the Supabase SQL editor.
 
 ## Testing setup
@@ -669,6 +702,9 @@ chosen):**
 - Add Drizzle `relations()` config if the manual `.leftJoin()` pattern keeps spreading.
 - Streamline how a new tool is registered (currently a hand-run SQL seed).
 - Leave: state public holidays (today one national list), if ever needed.
+- A screen to manage the allowed sign-up list (today SQL only); decide whether the guard should
+  exempt accounts added by hand in Supabase.
+- Password-save prompt in Edge on the live site (not understood; hand-saving works).
 
 ### Phase 3 - Launch hardening (before company-wide rollout)
 
@@ -683,14 +719,11 @@ chosen):**
   seconds), the auth store and the login flow all change - keep it a step of its own, and re-test
   every tool afterwards. Optional if server-side page protection turns out not
   to matter, but recommended.
-- **Step 15 (next) - Sign-up restriction to company email addresses** (so strangers
-  can't create accounts). Options to weigh at the time: a Supabase auth hook or
-  database check that rejects other domains, and/or removing email/password
-  sign-up entirely once SSO is in.
-- **Step 16 - Microsoft 365 SSO.** If the app registration is limited to RHG's
+- **Step 15 - Sign-up restriction to company email addresses.** ✅ done (see above).
+- **Step 16 (next) - Microsoft 365 SSO.** If the app registration is limited to RHG's
   tenant, this may make the email-domain restriction largely automatic - decide
   whether email/password sign-up stays at all.
-- **Step 17 - Email confirmation and notifications.** Confirm Email turned ON in
-  Supabase (Authentication → Configuration → Sign In / Providers → Email), and
-  decide whether new-sign-up (and leave approval) alerts need an email
+- **Step 17 - Email provider and notifications.** Confirm Email is already ON (Step 15). Connect a
+  real mail provider (custom SMTP) so confirmation emails come from an RHG address and aren't
+  throttled, and decide whether new-sign-up (and leave approval) alerts need an email
   notification (needs an email provider).
