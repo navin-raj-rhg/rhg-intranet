@@ -13,9 +13,9 @@ case proposal to directors before company-wide rollout approval, deployed as a
 live URL.
 
 **Numbering convention (use this when talking to Claude):** everything is a
-numbered **Step** (Step 1 ... Step 17 below), with sub-steps like 10.4. The
+numbered **Step** (Step 1 ... Step 15 done, Step 16 next), with sub-steps like 10.4. The
 **Phases** group the steps. Refer to work by step number, e.g. "let's do
-Step 15" or "back to 11.8b". Steps 1-15 are done; Steps 16+ are the agreed
+Step 15" or "back to 11.8b". Steps 1-15 are done; Step 16 and later are the agreed
 roadmap and have not been started.
 
 ## Live demo
@@ -524,8 +524,8 @@ reverted), 15.5 Confirm email and docs. Committed and pushed when Navin asked. T
 
 **Decisions (Navin's, all as recommended):** allowed domains `rapidhardwaregroup.com.au` and
 `ttfs.com.au`; the list lives in a database table edited by SQL; single outside addresses can
-be allowed too; **Confirm email** switched ON in Supabase (this step, not left to Step 17);
-still built even though Microsoft SSO (Step 16) may make it largely automatic.
+be allowed too; **Confirm email** switched ON in Supabase (this step, not left to the later email-provider work);
+still built even though Microsoft SSO (now planned for after approval) may make it largely automatic.
 
 **How it works:** table `allowed_signup_emails` (entry = a domain or one exact address) plus a
 trigger `check_signup_email_allowed` on `auth.users` that rejects other addresses
@@ -542,9 +542,9 @@ first.
 - The list is edited by SQL only; no screen.
 - Confirmation emails come from Supabase's built-in sender (testing-grade: low hourly limit,
   generic sender, may only reach Supabase team addresses). Custom SMTP needed before company-wide
-  use (Step 17). Tested by Navin: the confirmation email took several minutes to arrive, from
+  use (Phase 5, after approval). Tested by Navin: the confirmation email took several minutes to arrive, from
   "Supabase Auth <noreply@mail.app.supabase.io>".
-- `isSignupEmailAllowed` is tested but not yet used by a screen (kept for Step 16).
+- `isSignupEmailAllowed` is tested but not yet used by a screen (kept for when SSO is added).
 - Edge did not offer to save the password after signing in on the live site, even with Bitwarden
   off; Navin saved it by hand. Not a site fault as far as we could tell.
 - Claude could not sign in or sign up against the real Supabase; Navin tested the refusal and
@@ -578,7 +578,7 @@ README's Step 10 section.
 
 - **Sign-up is limited to the allowed company domains (Step 15)**; others are refused by the
   database. Confirm email is ON in Supabase; the link redirects to the configured Site URL
-  (the Railway address). Supabase's built-in mail sender is testing-grade - see Step 17.
+  (the Railway address). Supabase's built-in mail sender is testing-grade - see Phase 5 in the Roadmap.
 - **The new-sign-up alert is in-app only** - no email/push.
 - **Deleting an auth user who has claim/payroll/leave/cost-model history**
   removes their login but keeps their profile row (deliberate, so history isn't
@@ -706,7 +706,7 @@ chosen):**
   exempt accounts added by hand in Supabase.
 - Password-save prompt in Edge on the live site (not understood; hand-saving works).
 
-### Phase 3 - Launch hardening (before company-wide rollout)
+### Phase 3 - Launch hardening (Steps 14 and 15 done)
 
 - **Step 14 - `@supabase/ssr` cookie-based sessions.** ✅ done (see above). Original plan, placed first on purpose:
   it changes how the session is stored (cookies instead of browser storage +
@@ -720,10 +720,39 @@ chosen):**
   every tool afterwards. Optional if server-side page protection turns out not
   to matter, but recommended.
 - **Step 15 - Sign-up restriction to company email addresses.** ✅ done (see above).
-- **Step 16 (next) - Microsoft 365 SSO.** If the app registration is limited to RHG's
-  tenant, this may make the email-domain restriction largely automatic - decide
+
+### Phase 4 - Build the business case (next)
+
+**Why the order changed (Navin, after Step 15):** the demo exists to win approval from the
+directors. Microsoft 365 SSO needs RHG's tenant details from the wider team, who would then ask
+to see the intranet before it is ready - so SSO waits until after approval. Sign-up is already
+limited to the company domains (Step 15), so the demo is safe to show meanwhile.
+
+**Direction:** build more tools that **replace separate paid SaaS apps**, so the case can show
+"cost of the SaaS apps vs running the intranet". Known example: **Inspection Reporting
+(Step 12) replaces AuditComply, which RHG pays about 5k AUD per year.** Candidate:
+**project management, replacing Asana (about 2k AUD per year for 20 seats).** Other figures are
+not yet collected.
+
+- **Step 16 (next) - choose and build the next tool.** At the start of the session Navin lists
+  the SaaS apps RHG pays for (name, rough yearly cost, what the team actually uses it for) and
+  Claude proposes which to replace first, weighing the saving against how much of the app's
+  features really get used. Candidates already on the list: Product Data (Tech File / Plytix
+  style), container planning (Cargo Planner API), PowerBI-style charts, project management (Asana
+  replacement, ~2k AUD/yr for 20 seats).
+  Also consider hardening the existing tools (backlog above) where it makes them better than the
+  SaaS they replace - e.g. Inspection Reporting's Non-Conformance dialog and follow-up actions.
+- **Later - a "cost comparison" view** for the pitch (apps replaced, yearly SaaS cost, running
+  cost of the intranet). Needs real numbers from Navin; do not invent any.
+
+### Phase 5 - After approval (rollout)
+
+- **Microsoft 365 SSO** (needs RHG's Microsoft tenant details). If the app registration is
+  limited to RHG's tenant this may make the email-domain restriction largely automatic - decide
   whether email/password sign-up stays at all.
-- **Step 17 - Email provider and notifications.** Confirm Email is already ON (Step 15). Connect a
-  real mail provider (custom SMTP) so confirmation emails come from an RHG address and aren't
-  throttled, and decide whether new-sign-up (and leave approval) alerts need an email
-  notification (needs an email provider).
+- **Email provider and notifications.** Confirm Email is already ON (Step 15). Connect a real
+  mail provider (custom SMTP) so confirmation emails come from an RHG address and aren't
+  throttled or slow (Supabase's built-in sender took several minutes in the Step 15 test), and
+  decide whether new-sign-up and leave-approval alerts need an email notification.
+- A screen to manage the allowed sign-up list; decide whether the guard should exempt accounts
+  added by hand in Supabase (both also in the Backlog above).

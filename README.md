@@ -1146,10 +1146,10 @@ delete from public.allowed_signup_emails where entry = 'newdomain.com.au';    --
 - Confirmation emails are sent by Supabase's built-in mail service, which is meant for
   testing: a very low hourly limit, a generic sender and template, and it may only deliver
   to your Supabase team's addresses. A real mail provider (custom SMTP) is needed before
-  company-wide use (Step 17). Tested: a confirmation email to a company address took several
+  company-wide use (after approval). Tested: a confirmation email to a company address took several
   minutes to arrive, from "Supabase Auth <noreply@mail.app.supabase.io>".
 - Email/password sign-up is still open to the allowed domains; whether it stays once
-  Microsoft SSO exists is a Step 16 decision.
+  Microsoft SSO exists is a decision for when SSO is added (after approval).
 - Edge did not offer to save the password after signing in on the live site (even with
   Bitwarden off). Forcing a full page load after sign-in was tried and reverted because it
   made the dashboard slow. Saving the login by hand in the browser works.
