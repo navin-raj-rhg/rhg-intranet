@@ -1,4 +1,4 @@
-# RHG Intranet — Project Status (updated through Step 11)
+# RHG Intranet — Project Status (updated through Step 12)
 
 > **Where this lives:** `docs/project-status.md` in the repo is the source of
 > truth (Claude Code reads it via `CLAUDE.md`). Navin may also keep a copy in
@@ -15,7 +15,7 @@ live URL.
 **Numbering convention (use this when talking to Claude):** everything is a
 numbered **Step** (Step 1 ... Step 17 below), with sub-steps like 10.4. The
 **Phases** group the steps. Refer to work by step number, e.g. "let's do
-Step 12" or "back to 11.8b". Steps 1-11 are done; Steps 12+ are the agreed
+Step 13" or "back to 11.8b". Steps 1-12 are done; Steps 13+ are the agreed
 roadmap and have not been started.
 
 ## Live demo
@@ -91,7 +91,7 @@ The short version of these rules is in `CLAUDE.md` at the repo root.
   Navin as a short decision list first, with a recommendation for each
   (e.g. Step 10's leave policy, Step 11's decisions 1-22 and F1-F5).
 - **How changes reach the repo:**
-  - *Claude Code* (from Step 12, planned): Claude edits the repo on Navin's
+  - *Claude Code* (used from Step 12): Claude edits the repo on Navin's
     machine directly, runs lint/typecheck/tests, and **does not commit or push
     unless Navin asks** for that sub-step. It asks before `pnpm db:migrate`, any
     SQL, or anything that writes to the real database.
@@ -120,9 +120,9 @@ The short version of these rules is in `CLAUDE.md` at the repo root.
 - **Database:** Supabase (managed Postgres) + Drizzle ORM for all queries/migrations
 - **Auth:** Supabase Auth — email/password for now; Microsoft 365 SSO planned before company-wide launch
 - **File storage:** Cloudflare R2 (S3-compatible), accessed via presigned URLs
-- **PDF generation:** `pdfkit` (expense-claims payroll report)
+- **PDF generation:** `pdfkit` (expense-claims payroll report; inspection reports)
 - **Tests:** `pnpm test` runs Node's built-in test runner over `tests/*.test.ts`
-  (pure logic only, no database) - **82 tests as of Step 11**.
+  (pure logic only, no database) - **98 tests as of Step 12**.
 - **Package manager:** pnpm
 - **Hosting:** Railway (Node server), auto-deploying from `main`
 
@@ -235,6 +235,7 @@ pattern spreads.
 | 9. Role admin + manager teams | ✅ Done | Manage access UI, multi-role, employee->manager teams, team-scoped Expense Claims, new-sign-up alert |
 | 10. Leave Applications | ✅ Done (10.1-10.13, all pushed) | Apply/approve/reject/cancel, live balances by policy, team calendar, "Away today" tile |
 | 11. Cost Modelling | ✅ Done (11.1-11.10, all pushed) | Factors (FX, CBM, freight, port local costs), saved cost models with frozen figures, landed cost per AU port, margins, duplicate, product look-up (see below) |
+| 12. Inspection Reporting | ✅ Done (12.1-12.12) | Product QC inspections at suppliers/DCs: admin-built templates, phone-first checklist with photos and Minor/Major non-conformances, calculated result, review and close, saved products, PDF (see below) |
 
 ### Step 11: Cost Modelling (complete)
 
@@ -299,6 +300,101 @@ safe to re-run).
 - **Navin flagged more product-row columns and more Factors to add later**
   ("clean up/add towards the end") - not yet specified.
 
+### Step 12: Inspection Reporting (complete)
+
+Sub-steps (renumbered once, when two admin screens turned out to be missing from
+the first plan): 12.1 decisions, 12.2 rules + tests, 12.3 database (migration
+0006, seed 007), 12.4 API, 12.5 photos, 12.6 report list + access page, 12.7
+admin screens (Suppliers & DCs, template form builder), 12.8 new-inspection form
+and checklist (12.8b: products + camera buttons, migration 0007), 12.9 reviewer
+actions / history / delete, 12.10 PDF, 12.11 access + launcher check, 12.12 docs.
+The repo `README.md` has the full technical write-up. First step done with
+Claude Code, committing and pushing sub-step by sub-step when Navin asked.
+
+**What it is:** product QC inspections at **suppliers** and **DCs**. An
+inspector records a report from a template, answers every point, attaches photos
+and submits it; a reviewer closes it or sends it back; anyone can download a PDF.
+
+**Roles** (tool id `inspection-reporting`): `inspector` (start reports; edit,
+submit and discard their own drafts), `reviewer` (close or send back reports in
+review), `admin` (build templates, manage the Supplier/DC list, edit any draft,
+delete any report). Owner bypasses all three. **Everyone with a role sees every
+report.** No manager links (the tool has no employee/manager roles). Ticking
+Admin alone does not let someone close reports - that needs Reviewer.
+
+**Decisions (Navin's):**
+- **Subject:** product QC at suppliers or DCs. One admin-managed list of
+  supplier names and DC locations (type Supplier / DC), picked when starting a report.
+- **Templates:** built by admins in a form builder - named **sections**, each
+  with **inspection points**. Every point has a comment box, photos and
+  **Compliant / Non-Conformance** (plus **N/A**, added so a point that doesn't
+  apply can still be answered). Non-Conformance opens a dialog; for now it only
+  asks **Minor or Major** - **its other contents are to be decided later**.
+- **Result** is calculated, never typed: any Major, or 3 or more Minor = **Fail**;
+  1-2 Minor = **Pass with conditions**; otherwise **Pass** (rule in
+  `shared/utils/inspectionRules.ts`, one rule for all templates). It updates live
+  while filling in and is **frozen when a reviewer closes** the report.
+- **Workflow:** draft -> in review -> closed, plus "send back" (in review -> draft,
+  comment required). Submitting needs every point answered and every
+  Non-Conformance given Minor/Major, and shows a **warning if any
+  Non-Conformance is present**. Closed reports can't change.
+- **Photos:** no caption, no limit on how many, **10 MB each**, JPEG / PNG / HEIC.
+  Phone: separate **Take photo** (camera) and **Choose photos** (library) buttons.
+- **Products:** a report lists **several products**, each with a **product number
+  and a description** (up to 20). Saved products are recalled when a product number
+  is typed (descriptions only; **from inspections only**, not Cost Modelling). Saving
+  a report with a description updates the saved one (latest wins); a blank
+  description never erases it. **One checklist per report**, not one per product.
+- **A template is copied into each report** when it is started (and the
+  supplier/DC name, products and answers are frozen with it), so editing a template
+  or the list later never changes old reports.
+- **PDF** per report (any status; a draft/in-review PDF says it is not final).
+- **Phone first:** the checklist screen and form are designed for phone width.
+- **Left for later (Navin):** defects and follow-up / corrective actions, and what
+  the Non-Conformance dialog should ask.
+
+**Tables:** `inspection_locations`, `inspection_templates` (sections as JSON),
+`inspection_reports`, `inspection_report_points` (frozen section/point text +
+answer), `inspection_photos`, `inspection_events` (history + reviewer comments),
+`inspection_products` (saved products), `inspection_report_products`. Migrations
+`0006_harsh_proemial_gods.sql` and `0007_short_mojo.sql`; manual SQL
+`007_seed_inspection_reporting.sql` (tool + 3 roles, safe to re-run).
+
+**Patterns worth reusing:**
+- **Leaving a page with unsaved changes** uses our own dialog (Stay / Save and
+  leave / Leave without saving), not `window.confirm` - embedded browsers (the
+  Claude app pane) silently block the browser box and the user gets stuck.
+- **Photos** are added in three steps: server approves type/size/permission and
+  returns a presigned upload link locked to that exact size; the browser uploads
+  to R2; the server confirms the file really exists, then records it.
+- **Downloads behind the Bearer header** can't be plain links: the screen fetches
+  the file as a blob and saves it (`downloadPdf` in `ReportEditor.vue`).
+- **Reports delete their R2 photo files** (best effort) when a draft is discarded
+  or a report deleted.
+- **Migrations that replace a column** keep the old column for one release
+  (zero-downtime): `inspection_reports.product_no` is no longer used.
+
+**Known limitations (acceptable for the demo):**
+- **PDF text:** the built-in PDF fonts only cover Western characters - **Chinese
+  and other non-Western text prints as "?"**. A bundled font would fix it (large file).
+- **PDF photos:** full-size (no resizing library), JPEG/PNG only - **HEIC photos are
+  listed as "not shown"**; capped at 80 MB of photos per PDF.
+- **One checklist per report** - no separate result per product.
+- **Result rule is fixed** (3 Minor = Fail) - not per template.
+- **Non-Conformance dialog is only Minor/Major**; no defect log, no corrective-action
+  tracking, no notifications.
+- Suppliers/DCs and templates can only be **switched off**, never deleted or
+  merged; templates can't be duplicated.
+- A reviewer can close a report they started themselves (no separation of duties).
+- **Photo links expire after 15 minutes** (the page refreshes them when the tab is
+  revisited); an upload that is started but never recorded leaves an unused file in R2.
+- **Role refusals** (inspector can't close, reviewer can't edit, ...) are covered by
+  unit tests and server checks but were only exercised with the owner account by
+  Claude; Navin's multi-account test (navince Inspector, dh@test.com Reviewer,
+  pt@test.com Admin, navin@test.com none) is the end-to-end check.
+- `.claude/launch.json` (how the Claude app starts `pnpm dev` in its browser pane)
+  is untracked in git - commit it or delete it.
+
 ## Step 9 reference (still true)
 
 - Expense-claims specifics: categories are a fixed 7-value enum shared via
@@ -360,10 +456,12 @@ README's Step 10 section.
 - No Microsoft SSO yet - planned before company-wide launch.
 - `NUXT_SUPABASE_DB_URL` (direct connection) is intentionally not set on
   Railway - migrations must be run manually from a local machine after any
-  schema change; a push alone does not apply them (latest: `0005`). Manual SQL
-  in `server/db/manual-sql/` (001 new-user trigger, 002 expense-claims seed, 003
-  deleted-user trigger, 004 leave seed, 005 leave entitlements, 006 cost
-  modelling seed) is run by hand in the Supabase SQL editor.
+  schema change; a push alone does not apply them (latest: `0007`). **Order for a
+  release with a migration: run `pnpm db:migrate` first, then push** (the code needs
+  the new tables). Manual SQL in `server/db/manual-sql/` (001 new-user trigger, 002
+  expense-claims seed, 003 deleted-user trigger, 004 leave seed, 005 leave
+  entitlements, 006 cost modelling seed, 007 inspection reporting seed) is run by
+  hand in the Supabase SQL editor.
 
 ## Testing setup
 
@@ -381,6 +479,13 @@ README's Step 10 section.
   attachments, and **test cost models and categories** (e.g. "Test Supplier" /
   category "TEST" from 11.8a, and anything else created while testing Step 11 -
   see the clean-up SQL in the Step 11.10 hand-over).
+- **Also clear before the demo (Step 12 test data, all named "ZZ ..."):** inspection
+  reports made while testing (ZZ TEST Supplier; products ZZ-P-200, ZZ-P-300, ZZ-P-301,
+  ZZ-NEW-1 and the P-100 / ZZ-P-200 report products), templates "ZZ TEST Template" and
+  "ZZ TEST Builder Template", suppliers "ZZ TEST Supplier", "ZZ TEST Second Supplier",
+  "ZZ TEST Renamed" and DC "ZZ TEST DC", and their saved products. Navin's own reports
+  (Honde, Temp Fence Inspection Report) are real - do not delete those. Exact clean-up
+  statements were listed for Navin's approval at the end of Step 12.
 - Use a private window for the non-owner accounts.
 - **To call an API route authenticated from the browser console** (the address
   bar can't - no cookies): read the Supabase token from localStorage and send
@@ -401,10 +506,10 @@ vocabulary.
 
 ### Phase 1 - Build at least 3 tools (Steps 7, 10, 11, 12)
 
-Expense Claims (Step 7), Leave Applications (Step 10) and Cost Modelling
-(Step 11) are done.
+Expense Claims (Step 7), Leave Applications (Step 10), Cost Modelling (Step 11)
+and Inspection Reporting (Step 12) are done.
 
-- **Step 12 - Inspection Reporting** (not started - next)
+- **Step 12 - Inspection Reporting** ✅ done (see above)
 
 Other tools from the original vision - container planning via Cargo Planner
 API, PowerBI-style data charts, project management - remain on the list for
@@ -412,8 +517,8 @@ after Phase 3 or later; they get a step number when they are scheduled.
 
 **Do at the start of each tool:** decide its roles. Leave uses `employee` +
 `manager` (so links apply automatically); Cost Modelling uses `user` + `admin`
-(no links). Inspection Reporting may need an inspector/reviewer split or one
-plain role; a tool that doesn't define both `employee` and `manager` simply
+(no links); Inspection Reporting uses `inspector` + `reviewer` + `admin` (no
+links); a tool that doesn't define both `employee` and `manager` simply
 has no manager links, and `ToolAccessAdmin` adapts on its own. Put any rules or
 maths in `shared/utils` with unit tests (Step 10/11 pattern).
 
@@ -453,8 +558,16 @@ maths in `shared/utils` with unit tests (Step 10/11 pattern).
     flagged; admin screen to rename/merge/delete categories and add ports /
     charge lines; optionally make ticking Admin also tick User; consider
     per-shipment vs per-container local costs and container weight limits.
+  - **Inspection Reporting:** decide the **Non-Conformance dialog** contents and
+    whether to add defects / follow-up (corrective) actions; Chinese-capable PDF font
+    (text prints as "?" now) and HEIC / resized photos in the PDF; remove the unused
+    `inspection_reports.product_no` column (migration; kept one release for a safe
+    deploy); delete orphaned R2 photo files (abandoned uploads); optional per-template
+    pass/fail thresholds, per-product results, template duplicate, supplier/DC merge;
+    consider blocking a reviewer from closing their own report; confirm the role
+    refusals with Navin's multi-account test; commit or delete `.claude/launch.json`.
   - Remove the fake test accounts and test claims/leave/reports/uploads/cost
-    models before any demo.
+    models and inspection reports ("ZZ ...") before any demo.
   - Streamline how a new tool is registered (currently a hand-run SQL seed).
 
 ### Phase 3 - Launch hardening (before company-wide rollout)

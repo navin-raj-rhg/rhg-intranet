@@ -786,3 +786,167 @@ access rules), and every screen was driven in a real headless browser against
 the real API with only the Supabase login faked - checked against hand-worked
 figures (e.g. 8,000 units per 20', landed 3.55 at SYD, margins 29.0% / 50.0%)
 and at phone width. You tested each sub-step against the real Supabase.
+
+
+## Step 12: Inspection Reporting
+
+The fourth full tool, and the first built with Claude Code directly in the
+repo. It records **product QC inspections at suppliers and DCs**: an inspector
+works through a checklist on a phone, attaches photos and marks each point
+Compliant, Non-Conformance (Minor or Major) or N/A; a reviewer closes the report
+or sends it back; anyone can download a PDF. Built in sub-steps 12.1 to 12.12
+(12.8b added products and the camera button).
+
+### Roles and workflow
+
+- **Roles** (tool: `inspection-reporting`): `inspector`, `reviewer` and `admin`;
+  the owner bypasses as everywhere. No employee/manager links, so Manage access
+  shows three tickboxes per person. **Everyone with a role can see every report.**
+- **Inspector:** start a report from a template; edit, save, submit and discard
+  **their own** drafts; add photos; download PDFs.
+- **Reviewer:** on a report in review, **Close report** (result frozen, optional
+  comment) or **Send back** (comment required; the report returns to draft and the
+  inspector sees why).
+- **Admin:** build templates, manage the Supplier / DC list, edit any draft,
+  **delete any report**. (Admin alone cannot close reports - that needs Reviewer.)
+- **Status:** `draft` -> `in review` -> `closed`, and `in review` -> `draft` when
+  sent back. Submitting needs every point answered and every Non-Conformance given
+  Minor or Major, and shows a **warning if any Non-Conformance is present**. Closed
+  reports can't be changed. Every step is recorded in a **History** (who, when in
+  Malaysian time, comment).
+
+### The result (all in `shared/utils/inspectionRules.ts`, unit tested)
+
+- Each point is **Compliant**, **Non-Conformance** (with **Minor** or **Major**) or
+  **N/A**. The overall result is **calculated**, never typed: any Major, or **3 or
+  more Minor** = **Fail**; **1 or 2 Minor** = **Pass with conditions**; otherwise
+  **Pass**. N/A points are ignored.
+- It updates live while the inspector fills in the report ("Fail so far") and is
+  **stored (frozen) when a reviewer closes** the report. The rule is the same for
+  every template.
+- The same file holds who may create / edit / delete / change status, the template
+  checks, the photo type/size check (10 MB, JPEG / PNG / HEIC) and the product-list
+  checks, so the server and the screens agree.
+
+### Templates, suppliers/DCs and products
+
+- **Templates** are built by admins in a **form builder** (a Templates tab, then
+  `/templates/new` and `/templates/[id]`): a name, an on/off switch, any number of
+  named **sections**, each with **inspection points**, reorderable. Every point
+  automatically gets the answer buttons, a comment box and photos.
+- **Suppliers & DCs** is one admin-managed list (type Supplier or DC); entries can
+  be renamed or **switched off** (hidden from new reports), never deleted.
+- **A template and the supplier/DC are copied into each report** when it is
+  started. Editing a template or the list later never changes an existing report.
+- **Products:** a report lists up to 20 products, each a **product number and a
+  description**. Typing a number offers products saved by earlier inspections
+  (arrow keys / Enter, or tap); a saved product's description is filled in. Saving a
+  report remembers each product (a description updates the saved one - latest wins;
+  a blank one never erases it). Rows with nothing in them are dropped; a description
+  with no number or the same number twice is refused. There is **one checklist per
+  report** (not per product). Lookups use inspection data only, never Cost Modelling.
+
+### The checklist screen (phone first)
+
+- Header fields, products, then sections of points; each point has **Compliant**,
+  **Non-Conformance** (opens a dialog asking **Minor or Major** - its other contents
+  are still to be decided), **N/A**, a comment box and photos.
+- A bottom bar always shows "n of N answered", the live result and the counts, with
+  **Save draft** and **Submit for review**. Unanswered points are outlined in red.
+- **Photos:** **Take photo** opens the camera; **Choose photos** picks from the
+  library (several at once). Thumbnails open full size; the red x removes one.
+- Leaving with unsaved changes asks in our own dialog (**Stay / Save and leave /
+  Leave without saving**). **Discard draft** deletes the draft and its photos.
+
+### Photos (R2)
+
+Three steps, so nothing unchecked reaches the database: (1) the server checks the
+file name, type, size and that the report is a draft this user may edit, and returns
+a presigned upload link that only accepts a file of **exactly that size**; (2) the
+browser uploads straight to R2; (3) the server confirms the object exists at that
+size, then records it. Files live under `inspection-reporting/<yyyy>/<mm>/`. View
+links last 15 minutes and are fetched together per report. Removing a photo, or
+discarding / deleting a report, deletes the stored files too (best effort).
+
+### PDF
+
+`GET .../reports/[id]/pdf` builds an A4 PDF on demand with `pdfkit`
+(`server/utils/generateInspectionReportPdf.ts`): result, supplier/DC, template,
+date, reference, inspector, products and notes, a counts summary, every section and
+point with its coloured answer, comment and photos, the history, and a page footer.
+A draft or in-review PDF says the result is not final. The API needs the Bearer
+header, so the button fetches the file and saves it. Fonts are the built-in PDF
+ones, so **Chinese / other non-Western text prints as "?"**; photos are embedded
+full size (JPEG / PNG only, 80 MB cap per PDF - **HEIC is listed as "not shown"**).
+
+### How it fits together
+
+- **Schema** `server/db/schema/inspections.ts`: `inspection_locations`,
+  `inspection_templates` (sections as JSON), `inspection_reports`,
+  `inspection_report_points`, `inspection_photos`, `inspection_events`,
+  `inspection_products`, `inspection_report_products`. Migrations
+  `0006_harsh_proemial_gods.sql` (tables) and `0007_short_mojo.sql` (saved products;
+  copies each report's old single product number across). The old
+  `inspection_reports.product_no` column is left unused for one release.
+- **Pure logic** `shared/utils/inspectionRules.ts`; date-and-time display
+  `formatDateTimeMY` in `shared/utils/dates.ts`; API types in
+  `shared/types/inspection.ts`.
+- **Server helpers** `server/utils/`: `inspections.ts` (list/search, create, open,
+  save, status changes, photos, products, delete, PDF photos),
+  `inspectionTemplateBody.ts` and `inspectionProductsBody.ts` (request checks),
+  `generateInspectionReportPdf.ts`; `r2.ts` gained size lookup, delete and read.
+- **API** under `server/api/tools/inspection-reporting/`: `my-role`; `locations`
+  (GET, POST, `[id]` PUT); `templates` (GET, POST, `[id]` GET / PUT); `products?q=`;
+  `reports` (GET `?q=&status=&page=`, POST); `reports/[id]` (GET, PUT, DELETE);
+  `reports/[id]/status` (POST `submit` / `return` / `close`); `reports/[id]/pdf`;
+  `reports/[id]/photo-urls`; `reports/[id]/points/[pointId]/photos` (POST record) and
+  `.../photos/upload-url` (POST); `reports/[id]/photos/[photoId]` (DELETE). Every
+  route uses `requireToolRole` and the `roles` array.
+- **Pages** `app/pages/tools/inspection-reporting/`: `index.vue` (tabs: Reports, and
+  for admins Templates and Suppliers & DCs; `?tab=` opens one), `new.vue`, `[id].vue`,
+  `templates/new.vue`, `templates/[id].vue`, `access.vue` (Manage access).
+- **Components** `app/components/inspection-reporting/`: `ReportList`, `NewReportForm`,
+  `ReportEditor`, `PointCard`, `ProductsInput`, `LocationsAdmin`, `TemplatesAdmin`,
+  `TemplateBuilder`; `app/composables/useInspectionPhotos.ts` and
+  `app/utils/inspectionProducts.ts`.
+- **Tests:** `pnpm test` now runs **98** tests (16 new: `inspectionRules.test.ts`
+  and a date-time check in `dates.test.ts`).
+
+### One-time setup after applying this step
+
+1. `pnpm db:migrate` (migrations 0006 and 0007). Run locally - Railway does not
+   migrate. **Run it before pushing code that needs it.**
+2. Supabase SQL Editor: run `server/db/manual-sql/007_seed_inspection_reporting.sql`
+   (registers the tool and its three roles). Safe to re-run.
+3. Give people **Inspector**, a few **Reviewer** and **Admin** in Manage access.
+4. As an admin, add the **suppliers and DCs** and build at least one **template**
+   (inspectors can't start a report until both exist).
+
+### Known limitations (fine for the demo)
+
+- **PDF:** Chinese / non-Western characters print as "?"; HEIC photos aren't drawn;
+  photos aren't resized.
+- **One checklist per report** (no per-product result); the pass/fail rule is fixed.
+- **Non-Conformance dialog is only Minor/Major**; defects, follow-up actions and
+  notifications are not built yet (to be discussed).
+- Suppliers/DCs and templates can only be switched off (no delete, merge or duplicate).
+- A reviewer can close a report they started themselves.
+- View links expire after 15 minutes; an upload that is never recorded leaves an
+  unused file in R2.
+- The unused `inspection_reports.product_no` column should be dropped in a later
+  clean-up.
+- Test reports, templates, suppliers/DCs and products (all named "ZZ ...") should be
+  cleared before the director demo.
+
+**Verified:** `pnpm lint`, `pnpm typecheck` and `pnpm test` pass at every
+sub-step. Every API route was exercised against the real Supabase and R2 with the
+owner account (all status changes and refusals, photo upload / removal / size
+limits, product look-up, delete and the PDF route), and the screens were driven in
+the Claude app's browser pane at desktop width, with phone width checked for the
+list, builder, checklist and product rows. The PDF layout was rendered and checked
+page by page. **Not verified by Claude:** role refusals for non-owner accounts (the
+owner bypasses every check, and Claude can't sign in as other users - covered by
+unit tests and server checks, with Navin's multi-account test as the end-to-end
+check), the phone camera buttons on a real phone (the inputs are set to open the
+camera; Navin to confirm on the hosted site), and the reviewer buttons at phone
+width.
