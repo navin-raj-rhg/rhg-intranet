@@ -6,6 +6,7 @@ import {
   canEditInspection,
   hasNonConformance,
   inspectionOverall,
+  inspectionPhotoContentType,
   inspectionPhotoProblem,
   inspectionSubmitProblems,
   inspectionTemplateProblems,
@@ -105,4 +106,11 @@ test('photo checks: type and size', () => {
   assert.match(inspectionPhotoProblem('a.jpg', 'image/jpeg', 11 * 1024 * 1024), /10 MB/)
   assert.equal(inspectionPhotoProblem('a.png', 'image/png', 10 * 1024 * 1024), '')
   assert.match(inspectionPhotoProblem('a.png', 'image/png', 0), /empty/)
+})
+
+test('photo content type: keeps what the phone sent, else guesses from the name', () => {
+  assert.equal(inspectionPhotoContentType('a.jpg', 'image/JPEG'), 'image/jpeg')
+  assert.equal(inspectionPhotoContentType('IMG_1.HEIC', ''), 'image/heic')
+  assert.equal(inspectionPhotoContentType('notes.txt', ''), '')
+  assert.equal(inspectionPhotoContentType('noext', ''), '')
 })

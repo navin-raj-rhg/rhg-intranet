@@ -10,12 +10,15 @@ import {
   inspectionTemplates,
   profiles
 } from '~~/server/db/schema'
+import { buildObjectKey, deleteObject, getDownloadUrl, getUploadUrl, headObjectSize } from '~~/server/utils/r2'
 import {
   canCreateInspection,
   canDeleteInspection,
   canEditInspection,
   hasNonConformance,
   inspectionOverall,
+  inspectionPhotoContentType,
+  inspectionPhotoProblem,
   inspectionSubmitProblems,
   inspectionTransitionProblem,
   tallyInspectionPoints,
@@ -52,8 +55,8 @@ export function inspectionHttpError(err: unknown): never {
   throw err
 }
 
-export function parseInspectionId(event: H3Event, what = 'inspection report'): number {
-  const id = Number(getRouterParam(event, 'id'))
+export function parseInspectionId(event: H3Event, what = 'inspection report', param = 'id'): number {
+  const id = Number(getRouterParam(event, param))
   if (!Number.isInteger(id) || id <= 0) throw createError({ statusCode: 400, statusMessage: `Invalid ${what}.` })
   return id
 }
@@ -524,4 +527,107 @@ export function tidyTemplateSections(sections: { name: string, points: { text: s
 export function isUniqueViolation(err: unknown): boolean {
   const e = err as { code?: string, cause?: { code?: string } }
   return e?.code === '23505' || e?.cause?.code === '23505'
+}
+
+/* ------------------------------------------------------------------ */
+/* Photos                                                              */
+/* ------------------------------------------------------------------ */
+
+/** The point, if it is in this report and the report is a draft this user may edit. */
+async function requireEditablePoint(db: Db, reportId: number, pointId: number, userId: string, roles: string[]) {
+  const [row] = await db
+    .select({ point: inspectionReportPoints, report: inspectionReports })
+    .from(inspectionReportPoints)
+    .innerJoin(inspectionReports, eq(inspectionReports.id, inspectionReportPoints.reportId))
+    .where(and(eq(inspectionReportPoints.id, pointId), eq(inspectionReports.id, reportId)))
+  if (!row) throw new InspectionError(404, 'That inspection point no longer exists.')
+  assertCanEditPhotos(row.report.status, row.report.createdBy, userId, roles)
+  return row
+}
+
+function assertCanEditPhotos(status: InspectionStatus, createdBy: string, userId: string, roles: string[]) {
+  if (status !== 'draft') throw new InspectionError(409, 'Photos can only be changed while the report is a draft.')
+  if (!canEditInspection(status, roles, createdBy === userId)) {
+    throw new InspectionError(403, 'Only the inspector who started this report can change its photos.')
+  }
+}
+
+/** Approve one photo upload: checks type and size, returns a short-lived upload link for exactly that size. */
+export async function createInspectionPhotoUpload(
+  db: Db,
+  reportId: number,
+  pointId: number,
+  userId: string,
+  roles: string[],
+  file: { fileName: string, contentType: string, sizeBytes: number }
+) {
+  await requireEditablePoint(db, reportId, pointId, userId, roles)
+  const problem = inspectionPhotoProblem(file.fileName, file.contentType, file.sizeBytes)
+  if (problem) throw new InspectionError(400, problem)
+
+  const contentType = inspectionPhotoContentType(file.fileName, file.contentType)
+  const key = buildObjectKey(INSPECTION_TOOL_ID, file.fileName)
+  const uploadUrl = await getUploadUrl(key, contentType, 300, file.sizeBytes)
+  return { uploadUrl, key, contentType }
+}
+
+/** After the browser has uploaded: confirm the file really is in R2 at the approved size, then record it. */
+export async function registerInspectionPhoto(
+  db: Db,
+  reportId: number,
+  pointId: number,
+  userId: string,
+  roles: string[],
+  file: { key: string, fileName: string, contentType: string }
+) {
+  await requireEditablePoint(db, reportId, pointId, userId, roles)
+  if (!file.key.startsWith(`${INSPECTION_TOOL_ID}/`) || file.key.includes('..')) {
+    throw new InspectionError(400, 'That is not an inspection photo.')
+  }
+  const size = await headObjectSize(file.key)
+  if (size === null) throw new InspectionError(400, 'The photo did not finish uploading. Please try again.')
+  const contentType = inspectionPhotoContentType(file.fileName, file.contentType)
+  const problem = inspectionPhotoProblem(file.fileName, contentType, size)
+  if (problem) {
+    await deleteObject(file.key).catch(() => {})
+    throw new InspectionError(400, problem)
+  }
+  const [taken] = await db.select({ id: inspectionPhotos.id }).from(inspectionPhotos).where(eq(inspectionPhotos.r2Key, file.key))
+  if (taken) throw new InspectionError(409, 'That photo is already attached.')
+
+  const [photo] = await db
+    .insert(inspectionPhotos)
+    .values({ reportPointId: pointId, r2Key: file.key, fileName: file.fileName.slice(0, 200), contentType, sizeBytes: size, uploadedBy: userId })
+    .returning({ id: inspectionPhotos.id, fileName: inspectionPhotos.fileName, sizeBytes: inspectionPhotos.sizeBytes })
+  return photo
+}
+
+/** Remove a photo from a draft (the stored file is deleted too, best effort). */
+export async function deleteInspectionPhoto(db: Db, reportId: number, photoId: number, userId: string, roles: string[]) {
+  const [row] = await db
+    .select({ photo: inspectionPhotos, report: inspectionReports })
+    .from(inspectionPhotos)
+    .innerJoin(inspectionReportPoints, eq(inspectionReportPoints.id, inspectionPhotos.reportPointId))
+    .innerJoin(inspectionReports, eq(inspectionReports.id, inspectionReportPoints.reportId))
+    .where(and(eq(inspectionPhotos.id, photoId), eq(inspectionReports.id, reportId)))
+  if (!row) throw new InspectionError(404, 'That photo no longer exists.')
+  assertCanEditPhotos(row.report.status, row.report.createdBy, userId, roles)
+
+  await db.delete(inspectionPhotos).where(eq(inspectionPhotos.id, photoId))
+  await deleteObject(row.photo.r2Key).catch(() => {})
+  return { id: photoId }
+}
+
+/** Short-lived view links for every photo in a report, keyed by photo id. */
+export async function inspectionPhotoUrls(db: Db, reportId: number): Promise<Record<number, string>> {
+  const rows = await db
+    .select({ id: inspectionPhotos.id, r2Key: inspectionPhotos.r2Key })
+    .from(inspectionPhotos)
+    .innerJoin(inspectionReportPoints, eq(inspectionReportPoints.id, inspectionPhotos.reportPointId))
+    .where(eq(inspectionReportPoints.reportId, reportId))
+  const urls: Record<number, string> = {}
+  await Promise.all(rows.map(async (r) => {
+    urls[r.id] = await getDownloadUrl(r.r2Key, 900)
+  }))
+  return urls
 }

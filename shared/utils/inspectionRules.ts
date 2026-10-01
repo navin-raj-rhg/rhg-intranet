@@ -167,6 +167,21 @@ export function inspectionTemplateProblems(name: string, sections: InspectionTem
 const PHOTO_EXTENSIONS = ['jpg', 'jpeg', 'png', 'heic', 'heif']
 const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/heic', 'image/heif']
 
+const EXTENSION_TYPES: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  heic: 'image/heic',
+  heif: 'image/heif'
+}
+
+/** The type to upload a photo as: what the phone said, else guessed from the file name. */
+export function inspectionPhotoContentType(fileName: string, contentType: string): string {
+  if (contentType) return contentType.toLowerCase()
+  const ext = fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : ''
+  return EXTENSION_TYPES[ext] ?? ''
+}
+
 /** Plain-English problem with a photo, or '' if fine. Phones often send HEIC with no type, so the extension counts too. */
 export function inspectionPhotoProblem(fileName: string, contentType: string, sizeBytes: number): string {
   const ext = fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : ''

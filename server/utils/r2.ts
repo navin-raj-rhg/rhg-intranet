@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 let _r2: S3Client | null = null
@@ -60,11 +60,14 @@ export function buildObjectKey(toolId: string, originalFilename: string) {
 }
 
 /** Presigned URL the browser can PUT the file to directly, bypassing our server. */
-export function getUploadUrl(key: string, contentType: string, expiresInSeconds = 300) {
+export function getUploadUrl(key: string, contentType: string, expiresInSeconds = 300, contentLength?: number) {
   const command = new PutObjectCommand({
     Bucket: r2Bucket(),
     Key: key,
-    ContentType: contentType
+    ContentType: contentType,
+    // When given, the signature only fits a file of exactly this size, so the
+    // browser can't upload something bigger than the size we approved.
+    ...(contentLength === undefined ? {} : { ContentLength: contentLength })
   })
   return getSignedUrl(useR2(), command, { expiresIn: expiresInSeconds })
 }
@@ -91,4 +94,21 @@ export async function putObject(key: string, body: Buffer, contentType: string) 
     ContentType: contentType
   })
   await useR2().send(command)
+}
+
+/** Size of a stored object in bytes, or null if it isn't there. */
+export async function headObjectSize(key: string): Promise<number | null> {
+  try {
+    const res = await useR2().send(new HeadObjectCommand({ Bucket: r2Bucket(), Key: key }))
+    return res.ContentLength ?? null
+  } catch (err) {
+    const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode
+    if (status === 404) return null
+    throw err
+  }
+}
+
+/** Removes a stored object. Missing objects are not an error. */
+export async function deleteObject(key: string) {
+  await useR2().send(new DeleteObjectCommand({ Bucket: r2Bucket(), Key: key }))
 }
