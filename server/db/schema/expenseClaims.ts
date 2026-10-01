@@ -22,7 +22,8 @@ export const expenseCategory = pgEnum('expense_category', [
   'staff_wellness_day',
   'office_refreshments_amenities',
   'medical_claim',
-  'entertainment'
+  'entertainment',
+  'others'
 ])
 
 /**

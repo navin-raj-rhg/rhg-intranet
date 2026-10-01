@@ -8,6 +8,11 @@ import type { LeaveDateRestriction, RestrictionInfo } from './leaveRules.ts'
  * Kept out of the Vue files so they can be unit tested.
  */
 
+/** Status as shown on screen: sentence case. */
+export function leaveStatusLabel(status: string): string {
+  return status.charAt(0).toUpperCase() + status.slice(1)
+}
+
 export const DATE_FORMAT_HINT = 'Use dd/mm/yyyy, e.g. 15/03/2026'
 
 export interface LeaveFormInput {

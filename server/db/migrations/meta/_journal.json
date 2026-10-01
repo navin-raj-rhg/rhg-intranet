@@ -57,6 +57,13 @@
       "when": 1790837390715,
       "tag": "0007_short_mojo",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790841882036,
+      "tag": "0008_green_wolverine",
+      "breakpoints": true
     }
   ]
 }

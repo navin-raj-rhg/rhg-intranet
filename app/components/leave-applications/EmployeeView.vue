@@ -157,7 +157,7 @@ const allowance = (b: { entitled: number, adjustments: number }) => b.entitled +
               variant="subtle"
               class="ml-2"
             >
-              {{ app.status }}
+              {{ leaveStatusLabel(app.status) }}
             </UBadge>
           </p>
           <p class="text-sm text-muted">

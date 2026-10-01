@@ -511,6 +511,10 @@ and Inspection Reporting (Step 12) are done.
 
 - **Step 12 - Inspection Reporting** ✅ done (see above)
 
+- **Product Data tool** (Navin's own note, not yet scoped) - a product
+  information tool similar to Tech File and Plytix. Gets a Step number when
+  scheduled.
+
 Other tools from the original vision - container planning via Cargo Planner
 API, PowerBI-style data charts, project management - remain on the list for
 after Phase 3 or later; they get a step number when they are scheduled.

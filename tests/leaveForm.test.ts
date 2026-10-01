@@ -5,6 +5,7 @@ import {
   checkAttachment,
   MAX_ATTACHMENT_BYTES,
   personLabel,
+  leaveStatusLabel,
   DATE_FORMAT_HINT,
   describeHalfDays,
   formatDays,
@@ -104,4 +105,9 @@ test('person labels', () => {
   assert.equal(personLabel({ employeeName: null, employeeEmail: 'a@x.com' }), 'a@x.com')
   assert.equal(personLabel({ employeeName: '', employeeEmail: 'a@x.com' }), 'a@x.com')
   assert.equal(personLabel({}), 'Unknown')
+})
+
+test('leave status is shown in sentence case', () => {
+  assert.equal(leaveStatusLabel('pending'), 'Pending')
+  assert.equal(leaveStatusLabel('cancelled'), 'Cancelled')
 })

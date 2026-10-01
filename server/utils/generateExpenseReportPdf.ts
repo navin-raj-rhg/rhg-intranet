@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit'
+import { formatDateMY } from '~~/shared/utils/dates'
 import { EXPENSE_CATEGORY_LABELS } from '~~/shared/utils/expenseCategories'
 
 export interface ExpenseReportRow {
@@ -77,7 +78,7 @@ export async function generateExpenseReportPdf(rows: ExpenseReportRow[], reportM
       for (const row of employeeRows) {
         ensureSpace(20)
         const y = doc.y
-        doc.text(row.expenseDate, COLUMNS[0].x, y, { width: COLUMNS[0].width })
+        doc.text(formatDateMY(row.expenseDate), COLUMNS[0].x, y, { width: COLUMNS[0].width })
         doc.text(EXPENSE_CATEGORY_LABELS[row.category] ?? row.category, COLUMNS[1].x, y, { width: COLUMNS[1].width })
         doc.text(row.description, COLUMNS[2].x, y, { width: COLUMNS[2].width })
         doc.text(`RM ${row.amount}`, COLUMNS[3].x, y, { width: COLUMNS[3].width, align: 'right' })

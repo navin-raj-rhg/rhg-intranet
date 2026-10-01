@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'This employee is not on your team' })
   }
   if (existing.status !== 'submitted') {
-    throw createError({ statusCode: 409, statusMessage: 'Only submitted claims can be approved' })
+    throw createError({ statusCode: 409, statusMessage: 'This claim has already been approved' })
   }
 
   const [updated] = await db

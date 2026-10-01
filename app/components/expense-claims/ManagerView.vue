@@ -45,7 +45,7 @@ async function approveClaim(id: number) {
   } catch (err) {
     toast.add({
       title: 'Could not approve claim',
-      description: err instanceof Error ? err.message : 'Something went wrong.',
+      description: errorText(err),
       color: 'error'
     })
   } finally {
@@ -74,7 +74,7 @@ async function runReport() {
   } catch (err) {
     toast.add({
       title: 'Could not run report',
-      description: err instanceof Error ? err.message : 'Something went wrong.',
+      description: errorText(err),
       color: 'error'
     })
   } finally {
@@ -116,7 +116,7 @@ async function downloadBatchPdf(id: number) {
             {{ claim.employeeName || claim.employeeEmail }} — {{ EXPENSE_CATEGORY_LABELS[claim.category] ?? claim.category }}
           </p>
           <p class="text-sm text-muted">
-            {{ claim.expenseDate }} — {{ claim.description }}
+            {{ formatDateMY(claim.expenseDate) }} — {{ claim.description }}
           </p>
         </div>
         <div class="text-right shrink-0">
@@ -175,7 +175,7 @@ async function downloadBatchPdf(id: number) {
             {{ claim.employeeName || claim.employeeEmail }} — {{ EXPENSE_CATEGORY_LABELS[claim.category] ?? claim.category }}
           </p>
           <p class="text-sm text-muted">
-            {{ claim.expenseDate }} — {{ claim.description }}
+            {{ formatDateMY(claim.expenseDate) }} — {{ claim.description }}
           </p>
         </div>
         <p class="font-semibold shrink-0">
@@ -203,7 +203,7 @@ async function downloadBatchPdf(id: number) {
       >
         <div>
           <p class="font-medium">
-            {{ new Date(batch.runAt).toLocaleString() }}
+            {{ formatDateTimeMY(new Date(batch.runAt)) }}
           </p>
           <p class="text-sm text-muted">
             {{ batch.claimCount }} claim(s) — run by {{ batch.runByName || batch.runByEmail }}

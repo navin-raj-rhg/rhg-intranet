@@ -20,8 +20,9 @@ const { uploadFile } = useR2Storage()
 
 const form = reactive({
   leaveTypeId: undefined as number | undefined,
-  startText: '',
-  endText: '',
+  // ISO dates from the browser's own date field (it moves dd -> mm -> yyyy by itself)
+  startDate: '',
+  endDate: '',
   startHalfDay: false,
   endHalfDay: false,
   reason: ''
@@ -48,8 +49,8 @@ function clearAttachment() {
 function resetForm() {
   clearAttachment()
   form.leaveTypeId = undefined
-  form.startText = ''
-  form.endText = ''
+  form.startDate = ''
+  form.endDate = ''
   form.startHalfDay = false
   form.endHalfDay = false
   form.reason = ''
@@ -63,7 +64,13 @@ const note = computed(() =>
   selectedType.value ? restrictionNote(selectedType.value.dateRestriction, selectedType.value.restriction) : null
 )
 
-const parsed = computed(() => buildLeaveRequest(form))
+const parsed = computed(() => buildLeaveRequest({
+  leaveTypeId: form.leaveTypeId,
+  startText: form.startDate ? formatDateMY(form.startDate) : '',
+  endText: form.endDate ? formatDateMY(form.endDate) : '',
+  startHalfDay: form.startHalfDay,
+  endHalfDay: form.endHalfDay
+}))
 const startError = computed(() =>
   parsed.value.status === 'invalid' && parsed.value.field === 'start' ? parsed.value.message : undefined
 )
@@ -195,8 +202,8 @@ async function submit() {
             :error="startError"
           >
             <UInput
-              v-model="form.startText"
-              placeholder="dd/mm/yyyy"
+              v-model="form.startDate"
+              type="date"
               class="w-full"
             />
           </UFormField>
@@ -206,8 +213,8 @@ async function submit() {
             :error="endError"
           >
             <UInput
-              v-model="form.endText"
-              placeholder="dd/mm/yyyy"
+              v-model="form.endDate"
+              type="date"
               class="w-full"
             />
           </UFormField>

@@ -138,7 +138,7 @@ function review(a: TeamLeaveApplication) {
             variant="subtle"
             class="ml-2"
           >
-            {{ a.status }}
+            {{ leaveStatusLabel(a.status) }}
           </UBadge>
         </p>
         <p class="text-sm text-muted">

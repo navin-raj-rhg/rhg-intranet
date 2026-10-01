@@ -19,6 +19,12 @@ const { data: claims, refresh } = await useAsyncData('my-expense-claims', () =>
   useApiFetch<ExpenseClaim[]>('/api/tools/expense-claims/claims')
 )
 
+const statusLabel: Record<ExpenseClaim['status'], string> = {
+  submitted: 'Submitted',
+  approved: 'Approved',
+  paid: 'Paid'
+}
+
 const statusColor: Record<ExpenseClaim['status'], 'warning' | 'info' | 'success'> = {
   submitted: 'warning',
   approved: 'info',
@@ -74,7 +80,7 @@ async function submitClaim() {
   } catch (err) {
     toast.add({
       title: 'Could not submit claim',
-      description: err instanceof Error ? err.message : 'Something went wrong.',
+      description: errorText(err),
       color: 'error'
     })
   } finally {
@@ -136,7 +142,7 @@ async function saveEdit(id: number) {
   } catch (err) {
     toast.add({
       title: 'Could not update claim',
-      description: err instanceof Error ? err.message : 'Something went wrong.',
+      description: errorText(err),
       color: 'error'
     })
   } finally {
@@ -157,7 +163,7 @@ async function deleteClaim(id: number) {
   } catch (err) {
     toast.add({
       title: 'Could not delete claim',
-      description: err instanceof Error ? err.message : 'Something went wrong.',
+      description: errorText(err),
       color: 'error'
     })
   } finally {
@@ -371,11 +377,11 @@ async function viewReceipt(id: number) {
                   variant="subtle"
                   class="ml-2"
                 >
-                  {{ claim.status }}
+                  {{ statusLabel[claim.status] }}
                 </UBadge>
               </p>
               <p class="text-sm text-muted">
-                {{ claim.expenseDate }} — {{ claim.description }}
+                {{ formatDateMY(claim.expenseDate) }} — {{ claim.description }}
               </p>
             </div>
             <div class="text-right shrink-0">
