@@ -3,16 +3,108 @@
 
 @theme static {
   --font-sans: 'Public Sans', sans-serif;
+}
 
-  --color-green-50: #EFFDF5;
-  --color-green-100: #D9FBE8;
-  --color-green-200: #B3F5D1;
-  --color-green-300: #75EDAE;
-  --color-green-400: #00DC82;
-  --color-green-500: #00C16A;
-  --color-green-600: #00A155;
-  --color-green-700: #007F45;
-  --color-green-800: #016538;
-  --color-green-900: #0A5331;
-  --color-green-950: #052E16;
+/*
+ * RHG brand colours (Step 13.11).
+ *   Light: black / navy 14213D / orange FCA311 / grey E5E5E5 / white
+ *   Dark:  00072D / 001C55 / 0A2472 / 0E6BA8 / A6E1FA
+ *   Header and logo background: 006B96 (the logo image's own blue)
+ * Nuxt UI reads these --ui-* variables everywhere, so changing them here restyles
+ * the whole app.
+ */
+:root {
+  --rhg-header: #006B96;
+
+  --ui-primary: #FCA311;
+  --ui-secondary: #14213D;
+
+  --ui-bg: #ffffff;
+  --ui-bg-muted: #f6f6f6;
+  --ui-bg-elevated: #efefef;
+  --ui-bg-accented: #e5e5e5;
+  --ui-bg-inverted: #14213D;
+
+  --ui-border: #e5e5e5;
+  --ui-border-muted: #efefef;
+  --ui-border-accented: #cfcfcf;
+
+  --ui-text-dimmed: #8a90a0;
+  --ui-text-muted: #5b6478;
+  --ui-text-toned: #2f3a52;
+  --ui-text: #14213D;
+  --ui-text-highlighted: #000000;
+  --ui-text-inverted: #ffffff;
+
+  /* Status colours: the built-in light-mode shades are too pale to read as text on a tinted background. */
+  --ui-success: #137a39;
+  --ui-info: #0369a1;
+  --ui-warning: #a34a07;
+  --ui-error: #c81e1e;
+}
+
+.dark {
+  --ui-primary: #0E6BA8;
+  --ui-secondary: #A6E1FA;
+
+  --ui-bg: #00072D;
+  --ui-bg-muted: #000c3a;
+  --ui-bg-elevated: #001C55;
+  --ui-bg-accented: #0A2472;
+  --ui-bg-inverted: #A6E1FA;
+
+  --ui-border: #0A2472;
+  --ui-border-muted: #001C55;
+  --ui-border-accented: #12358f;
+
+  --ui-text-dimmed: #5f7fa8;
+  --ui-text-muted: #8fb4d6;
+  --ui-text-toned: #c3dcf0;
+  --ui-text: #e4f3fc;
+  --ui-text-highlighted: #ffffff;
+  --ui-text-inverted: #00072D;
+
+  /* Bright status colours for dark backgrounds (the light-mode shades above are too dark here). */
+  --ui-success: #4ade80;
+  --ui-info: #60a5fa;
+  --ui-warning: #fbbf24;
+  --ui-error: #f87171;
+}
+
+/* Text that sits on the primary colour: navy on orange (light), white on blue (dark). */
+:root:not(.dark) .bg-primary,
+:root:not(.dark) [role="tab"][data-state="active"] {
+  color: #14213D;
+}
+
+.dark .bg-primary,
+.dark [role="tab"][data-state="active"] {
+  color: #ffffff;
+}
+
+/* The blue header: everything inside it is light-on-blue, in both themes. */
+[data-rhg-header] {
+  --ui-text: #ffffff;
+  --ui-text-highlighted: #ffffff;
+  --ui-text-muted: #d3e9f5;
+  --ui-text-dimmed: #b5d6e8;
+  --ui-bg-elevated: rgb(255 255 255 / 0.16);
+  --ui-bg-accented: rgb(255 255 255 / 0.24);
+  --ui-border: rgb(255 255 255 / 0.28);
+  background-color: var(--rhg-header);
+  border-bottom-color: transparent;
+}
+
+/* Names and icons in the header stay white, never orange or light blue. */
+[data-rhg-header] .text-primary {
+  color: #ffffff;
+}
+
+/* Links and other text in the primary colour need more contrast than the buttons do. */
+:root:not(.dark) .text-primary {
+  color: #b45f06;
+}
+
+.dark .text-primary {
+  color: #6cc3f0;
 }

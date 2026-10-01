@@ -9,13 +9,22 @@ async function handleSignOut() {
 
 <template>
   <div>
-    <UHeader>
+    <UHeader
+      data-rhg-header
+      :toggle="false"
+    >
       <template #left>
         <NuxtLink
           to="/"
-          class="font-semibold text-highlighted"
+          class="flex items-center gap-3 font-semibold text-highlighted"
+          aria-label="RHG Intranet home"
         >
-          RHG Intranet
+          <img
+            src="/rhg-logo.png"
+            alt="RHG - Rapid Hardware Group"
+            class="h-10 w-auto"
+          >
+          <span class="hidden sm:inline">Intranet</span>
         </NuxtLink>
       </template>
 
@@ -32,6 +41,7 @@ async function handleSignOut() {
         >
           <UButton
             variant="ghost"
+            color="neutral"
             icon="i-lucide-user"
             :label="authStore.profile.fullName || authStore.profile.email"
           />

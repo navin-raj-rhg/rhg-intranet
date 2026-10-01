@@ -41,7 +41,12 @@ async function submit() {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-elevated/30">
+  <div class="flex min-h-screen flex-col items-center justify-center gap-6 bg-[#006B96] px-4 py-10">
+    <img
+      src="/rhg-logo.png"
+      alt="RHG - Rapid Hardware Group"
+      class="h-24 w-auto"
+    >
     <UCard class="w-full max-w-sm">
       <template #header>
         <h1 class="text-lg font-semibold">
