@@ -29,9 +29,13 @@ async function submit() {
       mode.value = 'signin'
     }
   } catch (err) {
+    // The database refuses addresses that aren't on the allowed list, but
+    // Supabase reports that only as a generic "Database error saving new user".
+    const raw = err instanceof Error ? err.message : ''
+    const refused = mode.value === 'signup' && /database error/i.test(raw)
     toast.add({
       title: mode.value === 'signin' ? 'Sign in failed' : 'Sign up failed',
-      description: err instanceof Error ? err.message : 'Something went wrong.',
+      description: refused ? signupNotAllowedMessage() : raw || 'Something went wrong.',
       color: 'error'
     })
   } finally {
@@ -53,7 +57,7 @@ async function submit() {
           RHG Intranet
         </h1>
         <p class="text-sm text-muted">
-          {{ mode === 'signin' ? 'Sign in to continue' : 'Create an account' }}
+          {{ mode === 'signin' ? 'Sign in to continue' : 'Create an account with your RHG email address' }}
         </p>
       </template>
 
@@ -67,6 +71,8 @@ async function submit() {
         >
           <UInput
             v-model="form.fullName"
+            name="name"
+            autocomplete="name"
             placeholder="Jane Tan"
             class="w-full"
           />
@@ -76,6 +82,8 @@ async function submit() {
           <UInput
             v-model="form.email"
             type="email"
+            name="email"
+            autocomplete="username"
             placeholder="you@company.com"
             class="w-full"
             required
@@ -86,6 +94,8 @@ async function submit() {
           <UInput
             v-model="form.password"
             type="password"
+            name="password"
+            :autocomplete="mode === 'signin' ? 'current-password' : 'new-password'"
             placeholder="••••••••"
             class="w-full"
             required
