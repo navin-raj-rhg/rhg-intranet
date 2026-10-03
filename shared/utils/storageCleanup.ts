@@ -6,7 +6,7 @@
  */
 
 /** The folders tools save under (see buildObjectKey). Anything else in the bucket is left alone. */
-export const STORAGE_TOOL_PREFIXES = ['expense-claims/', 'leave-applications/', 'inspection-reporting/', 'projects/']
+export const STORAGE_TOOL_PREFIXES = ['expense-claims/', 'leave-applications/', 'inspection-reporting/', 'projects/', 'pim/']
 
 /** A file must be at least this old before it can be called an orphan. */
 export const ORPHAN_MIN_AGE_MS = 24 * 60 * 60 * 1000

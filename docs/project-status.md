@@ -1,4 +1,4 @@
-# RHG Intranet — Project Status (updated through Step 16)
+# RHG Intranet — Project Status (updated through Step 17)
 
 > **Where this lives:** `docs/project-status.md` in the repo is the source of
 > truth (Claude Code reads it via `CLAUDE.md`). Navin may also keep a copy in
@@ -13,9 +13,9 @@ case proposal to directors before company-wide rollout approval, deployed as a
 live URL.
 
 **Numbering convention (use this when talking to Claude):** everything is a
-numbered **Step** (Step 1 ... Step 16 done, Step 17 next), with sub-steps like 10.4. The
+numbered **Step** (Step 1 ... Step 17 done, Step 18 next), with sub-steps like 10.4. The
 **Phases** group the steps. Refer to work by step number, e.g. "let's do
-Step 15" or "back to 11.8b". Steps 1-16 are done; Step 17 and later are the agreed
+Step 15" or "back to 11.8b". Steps 1-17 are done; Step 18 and later are the agreed
 roadmap and have not been started.
 
 ## Live demo
@@ -123,7 +123,7 @@ The short version of these rules is in `CLAUDE.md` at the repo root.
 - **File storage:** Cloudflare R2 (S3-compatible), accessed via presigned URLs
 - **PDF generation:** `pdfkit` (expense-claims payroll report; inspection reports)
 - **Tests:** `pnpm test` runs Node's built-in test runner over `tests/*.test.ts`
-  (pure logic only, no database) - **166 tests as of Step 16**.
+  (pure logic only, no database) - **181 tests as of Step 17**.
 - **Package manager:** pnpm
 - **Hosting:** Railway (Node server), auto-deploying from `main`
 
@@ -241,6 +241,7 @@ pattern spreads.
 | 14. Cookie-based sessions | ✅ Done (14.1-14.7) | `@supabase/ssr` cookies instead of the Bearer header, server-side redirect of signed-out page requests (see below) |
 | 15. Sign-up restriction | ✅ Done (15.1-15.5) | Only allowed company email domains (or listed single addresses) can create an account; enforced in the database (see below) |
 | 16. Projects | ✅ Done (16.1-16.11) | Project management for product launches: project types, master task list with sections, dependencies with automatic due dates, list and board, comments and files, dashboard banner (see below) |
+| 17. Product Information (PIM) | ✅ Done (17.1-17.11) | Product catalogue replacing Plytix: products with several suppliers, packaging, attributes per category, images and documents, completeness score, change history, CSV import and export (see below) |
 
 ### Step 11: Cost Modelling (complete)
 
@@ -631,6 +632,68 @@ the real tasks and sections in Projects -> Task list / Types & sections before f
 - Claude checked every screen in the browser pane at desktop and phone width (no sideways scrolling) and
   exercised the API, files and clean-up against the real database and R2 with temporary data.
 
+### Step 17: Product Information (PIM) (complete)
+
+Sub-steps: 17.1 decisions, 17.2 rules + tests, 17.3 database (migration 0014, seed 010), 17.4 API,
+17.5 admin screens (Categories & attributes, Manage access), 17.6 product list and "New product", 17.7
+product page (edit, delete, history), 17.8 images and documents, 17.9 CSV import, 17.10 full check,
+17.11 docs. Not committed by Claude; Navin commits and pushes when he asks. The repo `README.md` has the
+technical write-up.
+
+**What it is:** one searchable catalogue of RHG products replacing Plytix (Tech File style): details,
+several suppliers, packaging, attributes per category, images and documents, a completeness score and a
+change history, with CSV import and export. **Retailer feeds / channels are not wanted** (Navin).
+
+**Roles** (tool id `pim`): `viewer` (read, open files, export), `editor` (also create / edit products,
+files, import) and `admin` (also categories, attributes, delete products). Owner bypasses all three. No
+manager links, so Manage access shows three tickboxes. Everyone with a role sees every product.
+
+**Decisions (Navin's, all as recommended):**
+- **Core fields:** product number (unique across RHG, ignoring case), name, status (Draft / Active /
+  Discontinued), brand, category and sub-category, barcode (GTIN with check digit), RRP (AUD), short and
+  long description. **A product can have more than one supplier** (Navin's note): up to 10, each with an
+  optional supplier code, one marked primary.
+- **Categories:** admin-managed, one level of sub-category, separate from Cost Modelling's list.
+- **Attributes:** admin-defined per category (Text, Number, Yes/No, Pick-list; type fixed once created).
+- **Packaging and logistics:** carton / outer / pallet with L x W x H cm, weight kg, qty inside. Stored
+  only, not linked to Cost Modelling yet.
+- **Files:** multiple images with one main image; documents (spec sheets, certificates, manuals). R2 under
+  `pim/`, 20 MB each, same type rules as Projects.
+- **CSV:** import (check first, then all-or-nothing; updates by product number; blank cells never erase)
+  and export. **Change history** per product. **Completeness score** per category (admin ticks the built-in
+  fields and attributes that count).
+- **No links** to Cost Modelling / Inspection / Projects this step.
+
+**Tables:** `pim_categories`, `pim_attributes`, `pim_products`, `pim_product_suppliers`, `pim_packaging`,
+`pim_attribute_values`, `pim_files`, `pim_history`. Migration `0014_faulty_chameleon.sql`; manual SQL
+`010_seed_pim.sql` (tool + 3 roles; safe to re-run). The Storage clean-up page knows about `pim/`.
+
+**Patterns worth reusing:**
+- **Check first, then apply** for bulk imports: the same code path reports problems by spreadsheet row and
+  later does the work, in one transaction.
+- **One "data" shape** (`PimProductData`) used for loading, validating, comparing (history) and saving.
+- **Blank never erases** on updates from a file.
+- **Completeness computed in batches** for a list page (a handful of queries per page, not per product).
+
+**Known limitations (acceptable for the demo):**
+- Two people editing one product: last save wins (no conflict warning).
+- Import can't set images, documents, packaging or attributes; a typed "draft" on an existing product
+  doesn't change its status.
+- No bulk edit, no channel feeds, no links to other tools, no all-products completeness report.
+- Image / document links expire after 15 minutes; HEIC photos upload but browsers show an icon.
+- RRP shown as AUD with no GST note; packaging is stored only.
+- Claude exercised every route against the real Supabase and R2 with temporary data (later removed) and
+  looked at the screens at desktop and phone width; that check found two bugs, both fixed (import wiped a
+  blank sub-category; list buttons overflowed a phone). **Not verified by Claude:** role refusals for
+  non-owner accounts (Navin's multi-account test is the end-to-end check) and uploads from a phone camera
+  / HEIC (Navin will try after release).
+- One unexplained, never-repeated database error appeared once on the product list when the dev server
+  restarted (enum parameter on the image count query); a 40-round concurrency test could not reproduce it.
+  Watch for it.
+
+**Test data:** Navin's own test product "111" and the "hand tools" category (with a sub-category) exist
+from his testing; clear or keep as he likes. Build the real categories, attributes and products before use.
+
 ## Step 9 reference (still true)
 
 - Expense-claims specifics: categories are a fixed 7-value enum shared via
@@ -689,12 +752,12 @@ README's Step 10 section.
 - No Microsoft SSO yet - planned before company-wide launch.
 - `NUXT_SUPABASE_DB_URL` (direct connection) is intentionally not set on
   Railway - migrations must be run manually from a local machine after any
-  schema change; a push alone does not apply them (latest: `0013`; Steps 14 and 15 added none, Step 16 added `0012` and `0013`). **Order for a
+  schema change; a push alone does not apply them (latest: `0014`; Steps 14 and 15 added none, Step 16 added `0012` and `0013`, Step 17 added `0014`). **Order for a
   release with a migration that ADDS something: run `pnpm db:migrate` first, then push**
   (the code needs the new tables or columns). **When a migration DROPS something, push
   first, wait for the deploy, then migrate** (as with `0011`). Manual SQL in `server/db/manual-sql/` (001 new-user trigger, 002
   expense-claims seed, 003 deleted-user trigger, 004 leave seed, 005 leave
-  entitlements, 006 cost modelling seed, 007 inspection reporting seed, 008 sign-up domain guard, 009 projects seed) is run by
+  entitlements, 006 cost modelling seed, 007 inspection reporting seed, 008 sign-up domain guard, 009 projects seed, 010 PIM seed) is run by
   hand in the Supabase SQL editor.
 
 ## Testing setup
@@ -734,10 +797,10 @@ and Inspection Reporting (Step 12) are done.
 - **Step 12 - Inspection Reporting** ✅ done (see above)
 
 - **Product Information Management (PIM)** (Navin's own note; renamed from "Product Data") - a
-  product information tool similar to Tech File and Plytix. Scheduled as Step 17 (see Phase 4).
+  product information tool similar to Tech File and Plytix. Done in Step 17 (see above).
 
 Other tools from the original vision - container planning via Cargo Planner
-API, PowerBI-style data charts, project management - are now scheduled as Steps 16-20 (Phase 4).
+API, PowerBI-style data charts, project management - are scheduled as Steps 16-20 (Phase 4; 16 and 17 done).
 
 **Do at the start of each tool:** decide its roles. Leave uses `employee` +
 `manager` (so links apply automatically); Cost Modelling uses `user` + `admin`
@@ -787,7 +850,11 @@ chosen):**
 - Projects (from Step 16): **status reporting** (per project and all open projects for admins);
   optional manual due-date override; delete-unused for sections and types from the app; email
   notifications (needs the Phase 5 mail provider); subtasks / recurring tasks / calendar view if the team
-  asks; link a project to products once the PIM (Step 17) exists.
+  asks; link a project to products now that the PIM (Step 17) exists.
+- PIM (from Step 17): link Cost Modelling, Inspection Reporting and Projects to PIM products (they keep
+  their own product text today); a "someone else changed this" warning for two editors; import of packaging,
+  attributes and images; bulk edit; a completeness report across all products; confirm RRP currency / GST
+  wording; the retailer-feed idea was dropped by Navin.
 
 ### Phase 3 - Launch hardening (Steps 14 and 15 done)
 
@@ -822,10 +889,10 @@ not yet collected.
 - **Step 16 - Project management** ✅ done (see above). Built as a generic "Projects" tool. **Project
   status reporting** (one project; and all open projects for admins) was wanted and is deferred: see
   the Backlog below - schedule it as its own small Step or sub-step when Navin chooses.
-- **Step 17 (next) - Product Information Management (PIM)**, replacing Plytix (Tech File style). RHG used
+- **Step 17 - Product Information Management (PIM)** ✅ done (see above), replacing Plytix (Tech File style). RHG used
   to pay for Plytix, roughly **500 AUD/month (about 6k/yr) - Navin is not sure; confirm the real
   figure before it goes in the business case.**
-- **Step 18 - Container planning.** Replaces manual Excel calculations (no SaaS being cancelled).
+- **Step 18 (next) - Container planning.** Replaces manual Excel calculations (no SaaS being cancelled).
   The tool produces data that **feeds Cargo Planner**, which RHG will pay for - so it is a new
   cost, not a saving; do not count it in the "SaaS replaced" total.
 - **Step 19 - Dashboard widgets.**

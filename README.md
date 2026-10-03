@@ -1269,3 +1269,112 @@ page for sideways scrolling. **Not verified by Claude:** role refusals for non-o
 bypasses every check and Claude can't sign in as other users - covered by unit tests and code review, with
 Navin's multi-account test as the end-to-end check). All test data was removed afterwards; Navin cleared the
 rest of the Projects data in the Supabase SQL editor.
+
+## Step 17: Product Information (PIM)
+
+The sixth full tool: one searchable catalogue of RHG products, replacing Plytix (Tech File style).
+Each product has its details, suppliers, packaging, images and documents, a completeness score and a
+change history, with CSV import and export. **Selling data to retailers (channels / feeds) is not part of
+this tool** - Navin said it isn't needed. Built in sub-steps 17.1 to 17.11 with Claude Code; Navin tested
+each stop.
+
+### Roles and what people see
+
+- **Roles** (tool: `pim`): `viewer`, `editor`, `admin`; the owner bypasses as everywhere. No employee/manager
+  links, so Manage access shows three tickboxes. **Everyone with any role sees every product.**
+- **Viewers** search, open products, open files and export CSV. **Editors** also create and edit products,
+  add and remove files, choose the main image and import CSV. **Admins** also set up categories and
+  attributes and delete products.
+- **Screens:** the **Products** tab (search, status / category / sub-category filters, 50 per page, main
+  image, primary supplier, RRP, completeness badge, status), **New product**, the **product page**, and for
+  admins **Categories & attributes**.
+
+### What a product holds
+
+- **Details:** product number (**unique across RHG, ignoring capitals and extra spaces**), name, status
+  (Draft / Active / Discontinued), brand, category and optional sub-category, barcode (GTIN-8/12/13/14 with
+  its check digit verified), RRP (AUD), short and long description.
+- **Several suppliers**, up to 10, each with an optional supplier code; exactly one is **primary**.
+- **Packaging** at three levels (carton, outer, pallet): L x W x H cm, weight kg and quantity inside
+  ("directly inside", the same meaning as Cost Modelling). Stored only; nothing is calculated from it yet.
+- **Attributes:** extra fields an admin defines per category - Text, Number, Yes/No or Pick-list. The type
+  can't change once created. A product shows the attributes of its own category.
+- **Images and documents** in R2 under `pim/` (same three-step upload as Projects; 20 MB each; images
+  JPEG / PNG / HEIC / WebP / GIF; documents PDF / Word / Excel / PowerPoint / CSV / text / ZIP). The first
+  image is the **main** one (shown in the list); another can be made main; removing the main image promotes
+  the oldest remaining one.
+- **Completeness:** "x of y required fields filled". An admin ticks, per category, which built-in fields
+  count (short / long description, brand, supplier, barcode, RRP, main image, packaging) and can mark
+  attributes as required. A category with nothing required shows 100%.
+- **Change history:** one line per save listing what changed (old -> new), plus file additions / removals
+  and imports. Saving with no changes records nothing.
+
+### Categories and attributes (admins)
+
+One level of sub-category. A category or attribute that products use can only be **switched off**
+(hidden from new and edited products; existing products keep their values); an unused one can be
+**deleted**. Renaming never changes products. The category list is separate from Cost Modelling's.
+
+### CSV import and export
+
+- **Export** downloads the products matching the current filters. Cells starting with `=`, `+`, `-` or `@`
+  are protected so Excel doesn't run them as formulas.
+- **Import** (editors and admins) is two steps: choose the file and it is **checked first**, listing every
+  problem by spreadsheet row; only a clean file can be imported, and then **all rows are saved or none**.
+  A **template** can be downloaded.
+- Columns: Product number, Name, Status, Brand, Category, Sub-category, Suppliers, Short description,
+  Long description, Barcode, RRP. Only the first two are required. Several suppliers go in one cell,
+  separated by `;`, with the code after a colon (`Acme: A-1; Beta`); the first is primary.
+- An existing product number **updates** that product; **a blank cell never erases saved data**.
+  Categories must already exist (an admin adds them). Images, documents, packaging and attributes are
+  not imported. Up to 2,000 products at a time.
+
+### How it fits together
+
+- **Schema** `server/db/schema/pim.ts`: `pim_categories` (parent id for sub-categories, required fields),
+  `pim_attributes`, `pim_products`, `pim_product_suppliers`, `pim_packaging`, `pim_attribute_values`,
+  `pim_files`, `pim_history`. Migration `0014_faulty_chameleon.sql`. The database also enforces unique
+  product numbers (ignoring case), one primary supplier and one main image per product.
+- **Pure logic** `shared/utils/pimRules.ts` (checks, suppliers, attributes, completeness, file rules, CSV
+  reading / building / template, history diffs); API types in `shared/types/pim.ts`.
+- **Server** `server/utils/pim.ts` (all the work) and `pimBodies.ts` (request checks).
+- **API** under `server/api/tools/pim/`: `my-role`; `categories` (GET, POST, `[id]` PUT / DELETE);
+  `attributes` (POST, `[id]` PUT / DELETE); `products` (GET, POST, `export`, `import`, `[id]` GET / PUT /
+  DELETE, `[id]/history`, `[id]/files` POST, `upload-url`, `[fileId]` DELETE, `[fileId]/main`). Every route
+  uses `requireToolRole` and the `roles` array.
+- **Pages** `app/pages/tools/pim/`: `index.vue` (tabs), `new.vue`, `products/[id].vue`, `access.vue`.
+- **Components** `app/components/pim/`: `ProductList`, `ProductForm` (used for new and edit), `ProductPage`,
+  `FilesSection`, `ImportDialog`, `CategoriesAdmin`, `CategoryCard`, `AttributeList`;
+  `app/composables/usePimFiles.ts`. The **Storage clean-up** page knows about the `pim/` folder.
+- **Tests:** `pnpm test` now runs **181** tests (15 new, `pimRules.test.ts`).
+
+### One-time setup after applying this step
+
+1. `pnpm db:migrate` (migration 0014). Run locally - Railway does not migrate. **Run it before pushing
+   code that needs it.**
+2. Supabase SQL Editor: run `server/db/manual-sql/010_seed_pim.sql` (registers the tool and its three
+   roles). Safe to re-run.
+3. Give people **Viewer / Editor / Admin** in Product Information -> Manage access.
+4. As an admin, add the **categories**, their sub-categories, required fields and attributes before
+   adding or importing products.
+
+### Known limitations (fine for the demo)
+
+- **Two people editing one product:** the last save wins (no "someone else changed this" warning).
+- **Import** can't set images, documents, packaging or attributes, and a typed "draft" on an existing
+  product doesn't change its status (only a non-draft status does).
+- No bulk edit, no channel / retailer feeds, no link from Cost Modelling, Inspection or Projects to PIM
+  products (their product text stays separate), no completeness report across all products.
+- Links to images and documents expire after 15 minutes (reload the page). HEIC photos upload but browsers
+  show an icon instead of a thumbnail.
+- Currency is shown as AUD with no GST note; packaging is stored only.
+
+**Verified:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (181 tests) and `pnpm build` pass. Claude exercised
+the API against the real Supabase and R2 with temporary data (categories and attributes with every
+refusal, products with validation, duplicates, history and search, real image and document uploads, main
+image changes and removal, CSV export / round trip / import / refusals) and looked at the screens in the
+browser pane, with a phone-width check for sideways scrolling. That check found and fixed two bugs (an
+import wiped a sub-category when its cell was blank; the list buttons overflowed a phone). **Not verified by
+Claude:** role refusals for non-owner accounts (the owner bypasses every check - Navin's multi-account test
+is the end-to-end check) and uploads from a phone camera / HEIC photos (Navin will try after release). All
+temporary data was removed afterwards through the app.
