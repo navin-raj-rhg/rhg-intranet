@@ -1,4 +1,4 @@
-# RHG Intranet — Project Status (updated through Step 17)
+# RHG Intranet — Project Status (updated through Step 18)
 
 > **Where this lives:** `docs/project-status.md` in the repo is the source of
 > truth (Claude Code reads it via `CLAUDE.md`). Navin may also keep a copy in
@@ -13,9 +13,9 @@ case proposal to directors before company-wide rollout approval, deployed as a
 live URL.
 
 **Numbering convention (use this when talking to Claude):** everything is a
-numbered **Step** (Step 1 ... Step 17 done, Step 18 next), with sub-steps like 10.4. The
+numbered **Step** (Step 1 ... Step 18 done, Step 19 next), with sub-steps like 10.4. The
 **Phases** group the steps. Refer to work by step number, e.g. "let's do
-Step 15" or "back to 11.8b". Steps 1-17 are done; Step 18 and later are the agreed
+Step 15" or "back to 11.8b". Steps 1-18 are done; Step 19 and later are the agreed
 roadmap and have not been started.
 
 ## Live demo
@@ -123,7 +123,7 @@ The short version of these rules is in `CLAUDE.md` at the repo root.
 - **File storage:** Cloudflare R2 (S3-compatible), accessed via presigned URLs
 - **PDF generation:** `pdfkit` (expense-claims payroll report; inspection reports)
 - **Tests:** `pnpm test` runs Node's built-in test runner over `tests/*.test.ts`
-  (pure logic only, no database) - **181 tests as of Step 17**.
+  (pure logic only, no database) - **190 tests as of Step 18**.
 - **Package manager:** pnpm
 - **Hosting:** Railway (Node server), auto-deploying from `main`
 
@@ -242,6 +242,7 @@ pattern spreads.
 | 15. Sign-up restriction | ✅ Done (15.1-15.5) | Only allowed company email domains (or listed single addresses) can create an account; enforced in the database (see below) |
 | 16. Projects | ✅ Done (16.1-16.11) | Project management for product launches: project types, master task list with sections, dependencies with automatic due dates, list and board, comments and files, dashboard banner (see below) |
 | 17. Product Information (PIM) | ✅ Done (17.1-17.11) | Product catalogue replacing Plytix: products with several suppliers, packaging, attributes per category, images and documents, completeness score, change history, CSV import and export (see below) |
+| 18. Dashboard | ✅ Done (18.1-18.9) | Posts (post, comment, react, pin), Upcoming events (with public holidays) and the final dashboard layout with three placeholders (see below) |
 
 ### Step 11: Cost Modelling (complete)
 
@@ -694,6 +695,49 @@ manager links, so Manage access shows three tickboxes. Everyone with a role sees
 **Test data:** Navin's own test product "111" and the "hand tools" category (with a sub-category) exist
 from his testing; clear or keep as he likes. Build the real categories, attributes and products before use.
 
+### Step 18: Dashboard (complete)
+
+Sub-steps: 18.1 decisions, 18.2 rules + tests, 18.3 database (migration 0015), 18.4 Posts API, 18.5 Posts
+widget, 18.6 Upcoming events (API, widget, Manage events), 18.7 layout, 18.8 full check, 18.9 docs. Not
+committed by Claude; Navin commits and pushes when he asks. The repo `README.md` has the technical write-up.
+
+**What it is:** the dashboard's placeholders became real and the page got its final layout. **Not a tool**: no
+`tool_registry` row, no roles.
+
+**Decisions (Navin's, all as recommended):**
+- **Posts:** anyone who can sign in posts, comments and reacts. Text plus up to **4 images** (JPEG / PNG, 10 MB
+  each, R2 under `posts/`). **Six fixed emoji reactions**, one of each per person, click again to remove. Comments
+  are one level (no replies); reactions on posts and comments. Authors edit and delete their own; **the owner
+  deletes anyone's** (cannot edit them) and **pins one post** at a time. 10 posts per page with "Load more".
+  No notifications, no @mentions.
+- **Upcoming events:** owner-only "Manage events" screen (`/admin/events`); fields title, date, optional end date,
+  time, place, note; the widget shows the **next 5**, and **public holidays are mixed in** (from Leave).
+- **Layout:** Posts 2/3 width; the 1/3 column holds Upcoming events over Away today (3:2) and is exactly as tall as
+  Posts on desktop (lists scroll inside); phone stacks Posts, Upcoming events, Away today, placeholders. Away
+  today stays hidden without Leave access (Upcoming events then fills the column). Alert banners unchanged. Three
+  1/3-width placeholders below: Sales overview, Project overview, Goals overview (Step 19).
+
+**Tables:** `posts` (unique index: one pinned), `post_images`, `post_comments`, `post_reactions`,
+`post_comment_reactions`, `dashboard_events`. Migration `0015_numerous_union_jack.sql`. No manual SQL.
+
+**Patterns worth reusing:**
+- A part of the dashboard that is not a tool uses `requireProfile` / `requireOwner` directly, with its rules in
+  `shared/utils` (`postRules.ts`, `eventRules.ts`).
+- Image uploads reuse the Projects three-step approach; the Storage clean-up page lists every R2 folder, so a new
+  folder must be added there (`STORAGE_TOOL_PREFIXES` and `loadReferencedKeys`).
+- Name server helpers so they don't clash with Nitro / h3 auto-imports (`createEvent` did; renamed
+  `addDashboardEvent`).
+
+**Known limitations (acceptable for the demo):**
+- A post's images can't be changed after posting; no replies, mentions, notifications or email; one pinned post;
+  only the owner manages events; no recurring events; image links expire after 15 minutes; HEIC not accepted.
+- Claude checked about 60 API cases against the real Supabase and R2 with temporary accounts (all removed) and the
+  screens in the browser pane (desktop and phone). **Not verified by Claude:** the dashboard as a non-owner in a
+  real browser, the dashboard without Leave access, and a phone camera photo.
+
+**Test data:** none left by Claude. The real holiday "For Fun Day" and Navin's own event "Team outing" were added
+by Navin.
+
 ## Step 9 reference (still true)
 
 - Expense-claims specifics: categories are a fixed 7-value enum shared via
@@ -752,7 +796,7 @@ README's Step 10 section.
 - No Microsoft SSO yet - planned before company-wide launch.
 - `NUXT_SUPABASE_DB_URL` (direct connection) is intentionally not set on
   Railway - migrations must be run manually from a local machine after any
-  schema change; a push alone does not apply them (latest: `0014`; Steps 14 and 15 added none, Step 16 added `0012` and `0013`, Step 17 added `0014`). **Order for a
+  schema change; a push alone does not apply them (latest: `0015`; Steps 14 and 15 added none, Step 16 added `0012` and `0013`, Step 17 added `0014`, Step 18 added `0015`). **Order for a
   release with a migration that ADDS something: run `pnpm db:migrate` first, then push**
   (the code needs the new tables or columns). **When a migration DROPS something, push
   first, wait for the deploy, then migrate** (as with `0011`). Manual SQL in `server/db/manual-sql/` (001 new-user trigger, 002
@@ -856,6 +900,8 @@ chosen):**
   their own product text today); a "someone else changed this" warning for two editors; import of packaging,
   attributes and images; bulk edit; a completeness report across all products; confirm RRP currency / GST
   wording; the retailer-feed idea was dropped by Navin.
+- Dashboard (from Step 18): replies to comments, @mentions and in-app notifications for posts; changing a post's
+  images after posting; an "events editor" role instead of owner-only; recurring events.
 
 ### Phase 3 - Launch hardening (Steps 14 and 15 done)
 
@@ -872,7 +918,7 @@ chosen):**
   to matter, but recommended.
 - **Step 15 - Sign-up restriction to company email addresses.** ✅ done (see above).
 
-### Phase 4 - Build the business case (next)
+### Phase 4 - Build the business case (Steps 16-18 done; Step 19 next)
 
 **Why the order changed (Navin, after Step 15):** the demo exists to win approval from the
 directors. Microsoft 365 SSO needs RHG's tenant details from the wider team, who would then ask
@@ -897,14 +943,14 @@ complete app.** Container planning and an HR module are therefore moved to after
 - **Step 17 - Product Information Management (PIM)** ✅ done (see above), replacing Plytix (Tech File style). RHG used
   to pay for Plytix, roughly **500 AUD/month (about 6k/yr) - Navin is not sure; confirm the real
   figure before it goes in the business case.**
-- **Step 18 (next) - Dashboard.** Navin's layout, to confirm in the Step 18 decisions list:
+- **Step 18 - Dashboard** ✅ done (see above). Navin's layout, as built:
   - **Posts** replaces the "Announcements" placeholder: a **post / comment widget** where **anyone can
     post and comment and react with emojis.** It takes **2/3 of the width.**
   - The **1/3 column** beside it holds **Upcoming events** on top and **Away today** (already built in
     Step 10) below it. **Stacked together they must be the same height as the Posts widget.**
   - Below, **three 1/3-width placeholders:** **Sales overview, Project overview, Goals overview** (made
     real in Step 19).
-- **Step 19 - Dashboard charts.** Data is **uploaded** and shown as charts. **Sales overview:** charts from
+- **Step 19 (next) - Dashboard charts.** Data is **uploaded** and shown as charts. **Sales overview:** charts from
   uploaded sales data. **Project overview:** data about the projects (from the Projects tool).
   **Goals overview:** charts from uploaded goals data.
 - **Step 20 - Clean-up.** Clear the backlogs (this document's Backlog) and make the modifications needed

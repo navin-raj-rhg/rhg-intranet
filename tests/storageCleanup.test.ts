@@ -20,6 +20,7 @@ test('a recent file is left alone, so an upload in progress is safe', () => {
 test('files outside the tool folders are never touched', () => {
   assert.equal(isToolStorageKey('something-else/file.jpg'), false)
   assert.equal(isToolStorageKey('projects/2026/10/abc-brief.pdf'), true)
+  assert.equal(isToolStorageKey('posts/2026/10/abc-photo.png'), true)
   assert.equal(isOrphan(obj('something-else/file.jpg', 90), new Set(), NOW), false)
   assert.equal(isOrphan(obj('inspection-reporting/2026/09/p.jpg', 90), new Set(), NOW), true)
 })

@@ -74,6 +74,13 @@ const myTasksText = computed(() => {
   return myTasksOverdue.value ? `${base} ${myTasksOverdue.value} ${myTasksOverdue.value === 1 ? 'is' : 'are'} overdue.` : base
 })
 
+// Filled with real charts in Step 19.
+const overviewPlaceholders = [
+  { title: 'Sales overview', icon: 'i-lucide-chart-column', text: 'Placeholder: charts from uploaded sales data will appear here.' },
+  { title: 'Project overview', icon: 'i-lucide-kanban', text: 'Placeholder: a summary of projects will appear here.' },
+  { title: 'Goals overview', icon: 'i-lucide-target', text: 'Placeholder: charts from uploaded goals data will appear here.' }
+]
+
 async function claimOwner() {
   claimingOwner.value = true
   try {
@@ -181,37 +188,46 @@ async function claimOwner() {
       </template>
     </UAlert>
 
-    <!-- Widgets: at-a-glance info, placeholder data until real sources exist -->
-    <UPageGrid class="mt-8">
-      <UCard>
+    <!-- Top row: Posts (2/3) beside Upcoming events over Away today (1/3). On desktop
+         the column is exactly as tall as Posts; on a phone everything stacks. -->
+    <div class="mt-8 grid gap-4 lg:grid-cols-3">
+      <div class="h-[32rem] lg:col-span-2 lg:h-[36rem]">
+        <DashboardPostsWidget />
+      </div>
+      <div class="flex flex-col gap-4 lg:h-[36rem]">
+        <div class="min-h-0 lg:flex-[3]">
+          <DashboardUpcomingEvents />
+        </div>
+        <div
+          v-if="canSeeLeave"
+          class="min-h-0 lg:flex-[2]"
+        >
+          <DashboardAwayToday />
+        </div>
+      </div>
+    </div>
+
+    <!-- Second row: overview placeholders, made real in Step 19 -->
+    <div class="mt-4 grid gap-4 lg:grid-cols-3">
+      <UCard
+        v-for="w in overviewPlaceholders"
+        :key="w.title"
+        :data-testid="`placeholder-${w.title.toLowerCase().replace(' ', '-')}`"
+      >
         <template #header>
-          <span class="font-medium">Announcements</span>
+          <div class="flex items-center gap-2">
+            <UIcon
+              :name="w.icon"
+              class="size-5 text-muted"
+            />
+            <span class="font-medium">{{ w.title }}</span>
+          </div>
         </template>
         <p class="text-sm text-muted">
-          Placeholder: company announcements will appear here.
+          {{ w.text }}
         </p>
       </UCard>
-
-      <DashboardAwayToday v-if="canSeeLeave" />
-
-      <UCard>
-        <template #header>
-          <span class="font-medium">Sales overview</span>
-        </template>
-        <p class="text-sm text-muted">
-          Placeholder: sales snapshot / chart will appear here.
-        </p>
-      </UCard>
-
-      <UCard>
-        <template #header>
-          <span class="font-medium">Upcoming events</span>
-        </template>
-        <p class="text-sm text-muted">
-          Placeholder: upcoming events will appear here.
-        </p>
-      </UCard>
-    </UPageGrid>
+    </div>
 
     <!-- Launcher: tools the current user can access -->
     <div class="mt-10">
@@ -271,6 +287,14 @@ async function claimOwner() {
         color="neutral"
         icon="i-lucide-hard-drive"
         label="Storage clean-up"
+      />
+      <UButton
+        to="/admin/events"
+        variant="outline"
+        color="neutral"
+        icon="i-lucide-calendar-days"
+        label="Manage events"
+        class="ml-2"
       />
     </div>
   </UContainer>

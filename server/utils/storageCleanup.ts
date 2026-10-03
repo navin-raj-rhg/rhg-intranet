@@ -1,6 +1,6 @@
 import { isNotNull } from 'drizzle-orm'
 import type { useDb } from '~~/server/db/client'
-import { expenseClaims, expensePayoutBatches, inspectionPhotos, leaveApplications, pimFiles, projectFiles } from '~~/server/db/schema'
+import { expenseClaims, expensePayoutBatches, inspectionPhotos, leaveApplications, pimFiles, postImages, projectFiles } from '~~/server/db/schema'
 import { deleteObject, headObjectLastModified, listObjects } from '~~/server/utils/r2'
 import {
   findOrphans,
@@ -14,15 +14,16 @@ type Db = ReturnType<typeof useDb>
 
 /** Every file key some database row points to. */
 export async function loadReferencedKeys(db: Db): Promise<Set<string>> {
-  const [receipts, reports, attachments, photos, taskFiles, productFiles] = await Promise.all([
+  const [receipts, reports, attachments, photos, taskFiles, productFiles, postFiles] = await Promise.all([
     db.select({ k: expenseClaims.receiptKey }).from(expenseClaims),
     db.select({ k: expensePayoutBatches.pdfKey }).from(expensePayoutBatches).where(isNotNull(expensePayoutBatches.pdfKey)),
     db.select({ k: leaveApplications.attachmentKey }).from(leaveApplications).where(isNotNull(leaveApplications.attachmentKey)),
     db.select({ k: inspectionPhotos.r2Key }).from(inspectionPhotos),
     db.select({ k: projectFiles.r2Key }).from(projectFiles),
-    db.select({ k: pimFiles.r2Key }).from(pimFiles)
+    db.select({ k: pimFiles.r2Key }).from(pimFiles),
+    db.select({ k: postImages.fileKey }).from(postImages)
   ])
-  return new Set([...receipts, ...reports, ...attachments, ...photos, ...taskFiles, ...productFiles].map(r => r.k).filter((k): k is string => !!k))
+  return new Set([...receipts, ...reports, ...attachments, ...photos, ...taskFiles, ...productFiles, ...postFiles].map(r => r.k).filter((k): k is string => !!k))
 }
 
 /**

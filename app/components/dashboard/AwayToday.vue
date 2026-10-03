@@ -22,7 +22,10 @@ const people = computed(() => awayByDate(rows.value ?? []).get(today) ?? [])
 </script>
 
 <template>
-  <UCard>
+  <UCard
+    class="h-full"
+    :ui="{ root: 'flex h-full flex-col', body: 'min-h-0 flex-1 overflow-y-auto' }"
+  >
     <template #header>
       <div class="flex items-center justify-between gap-2">
         <span class="font-medium">Away today</span>

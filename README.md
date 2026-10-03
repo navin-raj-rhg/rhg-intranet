@@ -1378,3 +1378,71 @@ import wiped a sub-category when its cell was blank; the list buttons overflowed
 Claude:** role refusals for non-owner accounts (the owner bypasses every check - Navin's multi-account test
 is the end-to-end check) and uploads from a phone camera / HEIC photos (Navin will try after release). All
 temporary data was removed afterwards through the app.
+
+
+## Step 18: Dashboard (Posts and Upcoming events)
+
+The dashboard's placeholders for **Announcements** and **Upcoming events** became real, and the page got its
+final layout. Not a tool: there is no tool row and no role - **anyone who can sign in uses Posts**, and
+only the owner manages events. Built in sub-steps 18.1 to 18.9 with Claude Code; Navin tested each stop.
+
+### What people see
+
+- **Posts** (2/3 width, top left): anyone can post text and up to 4 images (JPEG / PNG, 10 MB each), comment
+  on posts (one level, no replies) and react with one of six emojis (thumbs up, heart, laugh, party, wow,
+  thanks - one of each per person, click again to take it back). Authors **edit and delete their own** posts
+  and comments (edited ones say "edited"); the **owner deletes anyone's** and can **pin one post** to the top.
+  Posts load 10 at a time with "Load more".
+- **Upcoming events** (1/3 column, top): the next 5 company events **and public holidays** (from Leave
+  Applications, with a "Public holiday" label), soonest first; a multi-day event stays until its last day.
+- **Away today** (1/3 column, below Upcoming events) is unchanged and still only shown to people with Leave
+  access (otherwise Upcoming events fills the column).
+- On a desktop the right column is exactly as tall as Posts; lists scroll inside their boxes. On a phone
+  everything stacks: Posts, Upcoming events, Away today, then the placeholders.
+- **Second row:** three 1/3-width placeholders - Sales overview, Project overview, Goals overview (Step 19).
+- **Manage events** (`/admin/events`, owner only; linked from the Upcoming events footer and the dashboard's
+  Owner section): add, edit and remove events - title, date, optional end date, time, place and note.
+  Past events stay listed there.
+
+### How it fits together
+
+- **Schema** `server/db/schema/dashboard.ts`: `posts` (a unique index allows only one pinned post),
+  `post_images`, `post_comments`, `post_reactions`, `post_comment_reactions`, `dashboard_events`. Migration
+  `0015_numerous_union_jack.sql`. No manual SQL (no tool to register).
+- **Pure logic** `shared/utils/postRules.ts` (limits, image rules, the six emojis, who may edit / delete,
+  reaction counting, the API shapes) and `shared/utils/eventRules.ts` (event checks, picking the upcoming list).
+- **Server** `server/utils/posts.ts` and `server/utils/dashboardEvents.ts`.
+- **API** under `server/api/dashboard/`: `posts` (GET, POST, `image-upload-url`, `[id]` PUT / DELETE,
+  `[id]/pin`, `[id]/reactions`, `[id]/comments` GET / POST), `post-comments/[commentId]` (PUT / DELETE,
+  `reactions`), `events` (GET upcoming, `all`, POST, `[id]` PUT / DELETE). Routes use `requireProfile` or
+  `requireOwner`.
+- **Images** use the same three steps as Projects (approved upload link locked to the size, upload to R2,
+  server confirms the file exists when the post is created). They live under `posts/` in R2; deleting a post
+  deletes its files, and the Storage clean-up page knows the `posts/` folder.
+- **Screens:** `app/components/dashboard/` `PostsWidget`, `PostCard`, `ReactionBar`, `UpcomingEvents`,
+  `AwayToday` (now fills its box); `app/composables/usePostImages.ts`; `app/pages/admin/events.vue`; layout
+  in `app/pages/index.vue`.
+- **Tests:** `pnpm test` now runs **190** tests (9 new: `postRules.test.ts`, `eventRules.test.ts`).
+
+### One-time setup after applying this step
+
+1. `pnpm db:migrate` (migration 0015, only adds tables). Run locally - Railway does not migrate. **Run it
+   before pushing the code.** (Already applied to the real database during the Step.)
+2. Nothing else: no seed SQL and no role to hand out.
+
+### Known limitations (fine for the demo)
+
+- A post's images can't be changed after posting (edit the text, or delete and repost).
+- No @mentions, no notifications (not even in-app), no email, no replies to comments, no search of old posts.
+- Only one post can be pinned; reactions are limited to the six emojis.
+- Only the owner manages events (there is no "events editor" role); no recurring events.
+- Image links expire after 15 minutes (reload to refresh). HEIC photos are not accepted (JPEG / PNG only).
+- A deactivated person's old posts and comments stay.
+
+**Verified:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (190 tests) and `pnpm build` pass. Claude ran about
+60 checks against the real Supabase and R2 using two temporary accounts plus the owner (limits, image rules,
+edit / delete / pin permissions, reactions, comments, pagination, parallel reactions and pins, R2 file removal
+on delete, event permissions, signed-out refusal) and drove the screens in the browser pane as the owner,
+including the desktop column-height match and phone stacking with no sideways scrolling. All temporary data
+was removed. **Not verified by Claude:** the dashboard as a non-owner in a real browser, the dashboard for
+someone without Leave access, and a phone camera photo (Navin's multi-account test is the end-to-end check).
