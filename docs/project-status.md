@@ -800,7 +800,8 @@ and Inspection Reporting (Step 12) are done.
   product information tool similar to Tech File and Plytix. Done in Step 17 (see above).
 
 Other tools from the original vision - container planning via Cargo Planner
-API, PowerBI-style data charts, project management - are scheduled as Steps 16-20 (Phase 4; 16 and 17 done).
+API, PowerBI-style data charts, project management - were re-planned after Step 17: see Phase 4 and
+Phase 5 in the Roadmap (container planning moved to after approval).
 
 **Do at the start of each tool:** decide its roles. Leave uses `employee` +
 `manager` (so links apply automatically); Cost Modelling uses `user` + `admin`
@@ -884,7 +885,11 @@ limited to the company domains (Step 15), so the demo is safe to show meanwhile.
 **project management, replacing Asana (about 2k AUD per year for 20 seats).** Other figures are
 not yet collected.
 
-**Order agreed with Navin (start of Step 16):**
+**Why the plan changed again (Navin, after Step 17):** things sped up - the CEO now knows about the
+project - so the goal is to **clean up and fill in the app with the data it needs, to show him an almost
+complete app.** Container planning and an HR module are therefore moved to after approval (Phase 5).
+
+**Order agreed with Navin (re-planned after Step 17):**
 
 - **Step 16 - Project management** ✅ done (see above). Built as a generic "Projects" tool. **Project
   status reporting** (one project; and all open projects for admins) was wanted and is deferred: see
@@ -892,20 +897,30 @@ not yet collected.
 - **Step 17 - Product Information Management (PIM)** ✅ done (see above), replacing Plytix (Tech File style). RHG used
   to pay for Plytix, roughly **500 AUD/month (about 6k/yr) - Navin is not sure; confirm the real
   figure before it goes in the business case.**
-- **Step 18 (next) - Container planning.** Replaces manual Excel calculations (no SaaS being cancelled).
-  The tool produces data that **feeds Cargo Planner**, which RHG will pay for - so it is a new
-  cost, not a saving; do not count it in the "SaaS replaced" total.
-- **Step 19 - Dashboard widgets.**
-- **Step 20 - PowerBI-style data charts.**
+- **Step 18 (next) - Dashboard.** Navin's layout, to confirm in the Step 18 decisions list:
+  - **Posts** replaces the "Announcements" placeholder: a **post / comment widget** where **anyone can
+    post and comment and react with emojis.** It takes **2/3 of the width.**
+  - The **1/3 column** beside it holds **Upcoming events** on top and **Away today** (already built in
+    Step 10) below it. **Stacked together they must be the same height as the Posts widget.**
+  - Below, **three 1/3-width placeholders:** **Sales overview, Project overview, Goals overview** (made
+    real in Step 19).
+- **Step 19 - Dashboard charts.** Data is **uploaded** and shown as charts. **Sales overview:** charts from
+  uploaded sales data. **Project overview:** data about the projects (from the Projects tool).
+  **Goals overview:** charts from uploaded goals data.
+- **Step 20 - Clean-up.** Clear the backlogs (this document's Backlog) and make the modifications needed
+  throughout the app; fill in the data the demo needs.
+- **Step 21 - Cost comparison pitch.** Apps replaced, yearly SaaS cost vs the running cost of the
+  intranet - and it also **pitches what the app does and how much more convenient it is.** Needs real
+  numbers from Navin; do not invent any.
 
-Hardening existing tools (backlog above, e.g. Inspection Reporting's Non-Conformance dialog and
-follow-up actions) is **not** part of Step 16; it gets its own step later (Navin agreed).
-Each Step starts with its own decisions list and sub-steps, as usual.
-- **Later - a "cost comparison" view** for the pitch (apps replaced, yearly SaaS cost, running
-  cost of the intranet). Needs real numbers from Navin; do not invent any.
+Each Step starts with its own decisions list and sub-steps, as usual, and is done in its own new session.
 
 ### Phase 5 - After approval (rollout)
 
+- **Container planning** (moved here from Step 18). Replaces manual Excel calculations (no SaaS being
+  cancelled). The tool produces data that **feeds Cargo Planner**, which RHG will pay for - so it is a new
+  cost, not a saving; do not count it in the "SaaS replaced" total.
+- **HR module** (new; scope to be decided when it is scheduled).
 - **Microsoft 365 SSO** (needs RHG's Microsoft tenant details). If the app registration is
   limited to RHG's tenant this may make the email-domain restriction largely automatic - decide
   whether email/password sign-up stays at all.
