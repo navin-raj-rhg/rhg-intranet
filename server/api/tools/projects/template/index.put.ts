@@ -13,6 +13,7 @@ export default defineEventHandler(async (event) => {
     await saveProjectTemplate(useDb(), parsed.data.tasks.map(t => ({
       ...t,
       description: t.description ?? null,
+      sectionId: t.sectionId ?? null,
       assigneeId: t.assigneeId ?? null
     })))
     return { ok: true }

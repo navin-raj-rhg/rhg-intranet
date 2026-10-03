@@ -168,7 +168,7 @@ const m = (
   leadTimeDays = 2,
   active = true
 ): TemplateTaskInput => ({
-  key, dependsOn, typeIds, leadTimeDays, active, title: `Task ${key}`, description: null, assigneeId: null
+  key, dependsOn, typeIds, leadTimeDays, active, title: `Task ${key}`, description: null, sectionId: null, assigneeId: null
 })
 
 test('tidyProjectName collapses spaces', () => {
@@ -221,4 +221,15 @@ test('taskStatusProblem: a blocked task cannot be started or finished', () => {
   assert.match(taskStatusProblem('todo', 'done', true)!, /waiting/)
   assert.equal(taskStatusProblem('todo', 'in_progress', false), null)
   assert.equal(taskStatusProblem('todo', 'todo', true), null)
+})
+
+test('planProjectTasks carries the section name and position of each task', () => {
+  const master = [{ ...m('A'), sectionId: 2 }, { ...m('B', ['A']), sectionId: 1 }, m('C', ['B'])]
+  const sections = [{ id: 1, name: 'Quality', sortOrder: 0 }, { id: 2, name: 'Marketing', sortOrder: 1 }]
+  const out = planProjectTasks(master, 1, '2026-10-05', [], sections)
+  assert.deepEqual(out.map(t => [t.key, t.sectionName, t.sectionOrder]), [
+    ['A', 'Marketing', 1],
+    ['B', 'Quality', 0],
+    ['C', null, 1000000]
+  ])
 })

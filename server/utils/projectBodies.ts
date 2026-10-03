@@ -10,6 +10,13 @@ export const projectTypeBodySchema = z.object({
   active: z.boolean().default(true)
 })
 
+export const projectSectionBodySchema = z.object({
+  name: z.string({ message: 'The section needs a name' }).max(PROJECT_NAME_MAX * 2),
+  active: z.boolean().default(true)
+})
+
+export const sectionOrderBodySchema = z.object({ ids: z.array(z.number().int().positive()).max(200) })
+
 export const projectTemplateBodySchema = z.object({
   tasks: z
     .array(z.object({
@@ -17,6 +24,7 @@ export const projectTemplateBodySchema = z.object({
       id: z.number().int().positive().optional(),
       title: z.string().max(PROJECT_TITLE_MAX * 2),
       description: optionalText,
+      sectionId: z.number().int().positive().nullable().optional(),
       assigneeId: personId.nullable().optional(),
       leadTimeDays: z.number(),
       active: z.boolean().default(true),
@@ -51,6 +59,7 @@ export const projectStatusBodySchema = z.object({ status: z.enum(['open', 'close
 export const newTaskBodySchema = z.object({
   title: z.string({ message: 'The task needs a title' }).max(PROJECT_TITLE_MAX * 2),
   description: optionalText,
+  sectionId: z.number().int().positive().nullable().optional(),
   assigneeId: personId.nullable().optional(),
   leadTimeDays: z.number(),
   dependsOn: z.array(z.number().int().positive()).max(200).default([])

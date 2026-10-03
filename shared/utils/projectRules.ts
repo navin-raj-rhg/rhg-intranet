@@ -237,6 +237,9 @@ export function isProjectAtRisk(
 /* Master task list and starting a project                             */
 /* ------------------------------------------------------------------ */
 
+/** Sort position of tasks with no section: after every real section. */
+export const NO_SECTION_ORDER = 1000000
+
 export const PROJECT_NAME_MAX = 120
 export const PROJECT_TITLE_MAX = 200
 export const PROJECT_TEXT_MAX = 4000
@@ -250,6 +253,8 @@ export function tidyProjectName(raw: string): string {
 export interface TemplateTaskInput extends DependencyNode {
   title: string
   description: string | null
+  /** Null = no section. */
+  sectionId: number | null
   assigneeId: string | null
   leadTimeDays: number
   active: boolean
@@ -279,6 +284,8 @@ export function templateTaskProblems(tasks: TemplateTaskInput[]): string[] {
 export interface PlannedProjectTask extends DependencyNode {
   title: string
   description: string | null
+  sectionName: string | null
+  sectionOrder: number
   assigneeId: string | null
   leadTimeDays: number
   dueDate: string | null
@@ -294,7 +301,8 @@ export function planProjectTasks(
   master: TemplateTaskInput[],
   typeId: number | null,
   startDate: string,
-  holidays: string[] = []
+  holidays: string[] = [],
+  sections: { id: number, name: string, sortOrder: number }[] = []
 ): PlannedProjectTask[] {
   if (typeId === null) return []
   const included = new Set(master.filter(t => t.active && t.typeIds.includes(typeId)).map(t => t.key))
@@ -307,15 +315,20 @@ export function planProjectTasks(
     dueDate: null
   }))
   const dates = new Map(initialDueDates(asTasks, startDate, holidays).map(d => [d.key, d.dueDate]))
-  return kept.map(t => ({
-    key: t.key,
-    title: tidyProjectName(t.title),
-    description: t.description,
-    assigneeId: t.assigneeId,
-    leadTimeDays: t.leadTimeDays,
-    dependsOn: t.dependsOn,
-    dueDate: dates.get(t.key) ?? null
-  }))
+  return kept.map((t) => {
+    const section = sections.find(s => s.id === t.sectionId)
+    return {
+      key: t.key,
+      title: tidyProjectName(t.title),
+      description: t.description,
+      sectionName: section?.name ?? null,
+      sectionOrder: section?.sortOrder ?? NO_SECTION_ORDER,
+      assigneeId: t.assigneeId,
+      leadTimeDays: t.leadTimeDays,
+      dependsOn: t.dependsOn,
+      dueDate: dates.get(t.key) ?? null
+    }
+  })
 }
 
 /** Who may change a task's status: its assignee, the project owner, an admin (or the platform owner). */

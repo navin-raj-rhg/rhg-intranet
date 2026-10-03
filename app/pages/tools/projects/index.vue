@@ -15,7 +15,7 @@ const tabItems = computed<{ label: string, value: TabValue }[]>(() => [
   ...(role.value?.isAdmin
     ? [
         { label: 'Task list', value: 'tasks' as const },
-        { label: 'Project types', value: 'types' as const }
+        { label: 'Types & sections', value: 'types' as const }
       ]
     : [])
 ])
@@ -106,7 +106,20 @@ const typesChanged = () => refreshNuxtData('projects-template')
         v-show="shownTab === 'types'"
         class="mt-6"
       >
-        <ProjectsTypesAdmin @changed="typesChanged" />
+        <div class="space-y-10">
+          <section class="space-y-3">
+            <h2 class="text-lg font-semibold">
+              Sections
+            </h2>
+            <ProjectsSectionsAdmin @changed="typesChanged" />
+          </section>
+          <section class="space-y-3">
+            <h2 class="text-lg font-semibold">
+              Project types
+            </h2>
+            <ProjectsTypesAdmin @changed="typesChanged" />
+          </section>
+        </div>
       </div>
     </template>
   </UContainer>

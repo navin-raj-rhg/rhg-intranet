@@ -5,6 +5,7 @@ import {
   profiles,
   projectComments,
   projectMembers,
+  projectSections,
   projectTaskDeps,
   projectTasks,
   projectTemplateTaskDeps,
@@ -32,6 +33,7 @@ import {
   unlockedByCompletion,
   validateDependencies,
   validateTaskLeadTime,
+  NO_SECTION_ORDER,
   PROJECT_NAME_MAX,
   PROJECT_TITLE_MAX,
   type ProjectTaskLike,
@@ -43,6 +45,7 @@ import type {
   ProjectListItem,
   ProjectMyTaskItem,
   ProjectPerson,
+  ProjectSectionItem,
   ProjectTaskStatusResponse,
   ProjectTemplateResponse,
   ProjectTypeItem,
@@ -163,6 +166,68 @@ export async function updateProjectType(db: Db, id: number, rawName: string, act
   }
 }
 
+/* ---- sections ---- */
+
+export async function listProjectSections(db: Db | Tx, includeInactive: boolean): Promise<ProjectSectionItem[]> {
+  return await db
+    .select({ id: projectSections.id, name: projectSections.name, active: projectSections.active })
+    .from(projectSections)
+    .where(includeInactive ? undefined : eq(projectSections.active, true))
+    .orderBy(asc(projectSections.sortOrder), asc(projectSections.id))
+}
+
+function checkSectionName(raw: string): string {
+  const name = tidyProjectName(raw)
+  if (!name) throw new ProjectError(400, 'The section needs a name.')
+  if (name.length > PROJECT_NAME_MAX) throw new ProjectError(400, `The name is too long (${PROJECT_NAME_MAX} characters at most).`)
+  return name
+}
+
+export async function createProjectSection(db: Db, rawName: string, active: boolean) {
+  const name = checkSectionName(rawName)
+  try {
+    const [maxRow] = await db.select({ next: sql<number>`coalesce(max(${projectSections.sortOrder}), 0) + 1` }).from(projectSections)
+    const [row] = await db.insert(projectSections).values({ name, active, sortOrder: maxRow!.next }).returning({ id: projectSections.id })
+    return row!
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new ProjectError(409, `There is already a section called "${name}".`)
+    throw err
+  }
+}
+
+export async function updateProjectSection(db: Db, id: number, rawName: string, active: boolean) {
+  const name = checkSectionName(rawName)
+  try {
+    const [row] = await db.update(projectSections).set({ name, active }).where(eq(projectSections.id, id)).returning({ id: projectSections.id })
+    if (!row) throw new ProjectError(404, 'That section no longer exists.')
+    return row
+  } catch (err) {
+    if (isUniqueViolation(err)) throw new ProjectError(409, `There is already a section called "${name}".`)
+    throw err
+  }
+}
+
+/** Saves the order of the sections (every id, in the order they should appear). */
+export async function reorderProjectSections(db: Db, order: number[]) {
+  const all = (await db.select({ id: projectSections.id }).from(projectSections)).map(r => r.id)
+  if (order.length !== all.length || new Set(order).size !== order.length || order.some(id => !all.includes(id))) {
+    throw new ProjectError(409, 'The list of sections changed. Reload the page and try again.')
+  }
+  await db.transaction(async (tx) => {
+    for (const [index, id] of order.entries()) {
+      await tx.update(projectSections).set({ sortOrder: index }).where(eq(projectSections.id, id))
+    }
+  })
+}
+
+/** Resolves a section id to the name and position a task keeps (or none). */
+async function resolveSection(db: Db | Tx, sectionId: number | null | undefined) {
+  if (sectionId === null || sectionId === undefined) return { sectionName: null, sectionOrder: NO_SECTION_ORDER }
+  const [s] = await db.select().from(projectSections).where(eq(projectSections.id, sectionId))
+  if (!s) throw new ProjectError(400, 'That section no longer exists.')
+  return { sectionName: s.name, sectionOrder: s.sortOrder }
+}
+
 async function loadTemplateInputs(db: Db | Tx): Promise<TemplateTaskInput[]> {
   const [tasks, types, deps] = await Promise.all([
     db.select().from(projectTemplateTasks).orderBy(asc(projectTemplateTasks.sortOrder), asc(projectTemplateTasks.id)),
@@ -173,6 +238,7 @@ async function loadTemplateInputs(db: Db | Tx): Promise<TemplateTaskInput[]> {
     key: String(t.id),
     title: t.title,
     description: t.description,
+    sectionId: t.sectionId,
     assigneeId: t.defaultAssigneeId,
     leadTimeDays: t.leadTimeDays,
     active: t.active,
@@ -184,6 +250,7 @@ async function loadTemplateInputs(db: Db | Tx): Promise<TemplateTaskInput[]> {
 export async function loadProjectTemplate(db: Db): Promise<ProjectTemplateResponse> {
   return {
     types: await listProjectTypes(db, true),
+    sections: await listProjectSections(db, true),
     tasks: (await loadTemplateInputs(db)).map(t => ({ ...t }))
   }
 }
@@ -208,6 +275,10 @@ export async function saveProjectTemplate(db: Db, incoming: TemplateSaveTask[]) 
   if (cleaned.some(t => t.typeIds.some(id => !typeIds.has(id)))) {
     throw new ProjectError(400, 'A project type in that list no longer exists. Reload the page and try again.')
   }
+  const sectionIds = new Set((await db.select({ id: projectSections.id }).from(projectSections)).map(s => s.id))
+  if (cleaned.some(t => t.sectionId !== null && !sectionIds.has(t.sectionId))) {
+    throw new ProjectError(400, 'A section in that list no longer exists. Reload the page and try again.')
+  }
   await failIfNotPeople(db, [...new Set(cleaned.map(t => t.assigneeId).filter((x): x is string => !!x))], 'A default assignee')
 
   await db.transaction(async (tx) => {
@@ -228,6 +299,7 @@ export async function saveProjectTemplate(db: Db, incoming: TemplateSaveTask[]) 
       const values = {
         title: t.title,
         description: t.description,
+        sectionId: t.sectionId,
         defaultAssigneeId: t.assigneeId ?? null,
         leadTimeDays: t.leadTimeDays,
         sortOrder: index,
@@ -353,6 +425,7 @@ export async function loadProjectView(db: Db | Tx, access: ProjectAccess): Promi
       id: projectTasks.id,
       title: projectTasks.title,
       description: projectTasks.description,
+      sectionName: projectTasks.sectionName,
       assigneeId: projectTasks.assigneeId,
       assigneeName: profiles.fullName,
       assigneeEmail: profiles.email,
@@ -364,7 +437,7 @@ export async function loadProjectView(db: Db | Tx, access: ProjectAccess): Promi
     .from(projectTasks)
     .leftJoin(profiles, eq(profiles.id, projectTasks.assigneeId))
     .where(eq(projectTasks.projectId, project.id))
-    .orderBy(asc(projectTasks.sortOrder), asc(projectTasks.id))
+    .orderBy(asc(projectTasks.sectionOrder), asc(projectTasks.sortOrder), asc(projectTasks.id))
   const taskIds = tasks.map(t => t.id)
   const deps = taskIds.length ? await db.select().from(projectTaskDeps).where(inArray(projectTaskDeps.taskId, taskIds)) : []
   const comments = taskIds.length
@@ -397,6 +470,7 @@ export async function loadProjectView(db: Db | Tx, access: ProjectAccess): Promi
         id: t.id,
         title: t.title,
         description: t.description,
+        section: t.sectionName,
         assigneeId: t.assigneeId,
         assigneeName: t.assigneeId ? personName(t.assigneeName, t.assigneeEmail) : null,
         status: t.status,
@@ -487,7 +561,8 @@ export async function createProject(db: Db, ownerId: string, input: NewProjectIn
     ...t,
     assigneeId: t.assigneeId && people.has(t.assigneeId) ? t.assigneeId : null
   }))
-  const planned = planProjectTasks(master, input.typeId, input.startDate, await loadHolidayDates(db))
+  const sections = await db.select().from(projectSections)
+  const planned = planProjectTasks(master, input.typeId, input.startDate, await loadHolidayDates(db), sections)
   const memberIds = new Set([ownerId, ...input.memberIds, ...planned.map(t => t.assigneeId).filter((x): x is string => !!x)])
 
   return await db.transaction(async (tx) => {
@@ -512,6 +587,8 @@ export async function createProject(db: Db, ownerId: string, input: NewProjectIn
         templateTaskId: Number(t.key),
         title: t.title,
         description: t.description,
+        sectionName: t.sectionName,
+        sectionOrder: t.sectionOrder,
         assigneeId: t.assigneeId,
         leadTimeDays: t.leadTimeDays,
         dueDate: t.dueDate,
@@ -643,6 +720,8 @@ async function dateNewlyFreeTasks(tx: Tx, likes: ProjectTaskLike[], holidays: st
 export interface NewTaskInput {
   title: string
   description: string | null
+  /** undefined = leave the task's section as it is (edits only); null = no section. */
+  sectionId?: number | null
   assigneeId: string | null
   leadTimeDays: number
   dependsOn: number[]
@@ -655,6 +734,7 @@ export async function addProjectTask(db: Db, access: ProjectAccess, input: NewTa
   const holidays = await loadHolidayDates(db)
   return await db.transaction(async (tx) => {
     await failIfAssigneeNotMember(tx, access.project.id, input.assigneeId)
+    const section = await resolveSection(tx, input.sectionId)
     const { tasks, likes } = await loadTaskGraph(tx, access.project.id)
     const known = new Set(tasks.map(t => t.id))
     const dependsOn = [...new Set(input.dependsOn)]
@@ -668,6 +748,7 @@ export async function addProjectTask(db: Db, access: ProjectAccess, input: NewTa
       projectId: access.project.id,
       title,
       description: cleanText(input.description),
+      ...section,
       assigneeId: input.assigneeId,
       leadTimeDays: input.leadTimeDays,
       dueDate: blocked ? null : addWorkingDaysISO(today, input.leadTimeDays, holidays),
@@ -695,6 +776,9 @@ export async function updateProjectTask(
     const { tasks, likes } = await loadTaskGraph(tx, access.project.id)
     const task = tasks.find(t => t.id === taskId)
     if (!task) throw new ProjectError(404, 'That task no longer exists.')
+    const section = input.sectionId === undefined
+      ? { sectionName: task.sectionName, sectionOrder: task.sectionOrder }
+      : await resolveSection(tx, input.sectionId)
     const known = new Set(tasks.map(t => t.id))
     const dependsOn = [...new Set(input.dependsOn)]
     if (dependsOn.some(d => !known.has(d))) throw new ProjectError(400, 'A task it waits for is not in this project.')
@@ -707,6 +791,7 @@ export async function updateProjectTask(
     await tx.update(projectTasks).set({
       title,
       description: cleanText(input.description),
+      ...section,
       assigneeId: input.assigneeId,
       leadTimeDays: input.leadTimeDays,
       // A task that is waiting again loses its date (unless already started).

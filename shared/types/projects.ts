@@ -21,11 +21,18 @@ export interface ProjectTypeItem {
   active: boolean
 }
 
+export interface ProjectSectionItem {
+  id: number
+  name: string
+  active: boolean
+}
+
 /** One master-list task, as the admin screen edits it. `key` is String(id) for saved tasks. */
 export interface ProjectTemplateTaskItem {
   key: string
   title: string
   description: string | null
+  sectionId: number | null
   assigneeId: string | null
   leadTimeDays: number
   active: boolean
@@ -35,6 +42,7 @@ export interface ProjectTemplateTaskItem {
 
 export interface ProjectTemplateResponse {
   types: ProjectTypeItem[]
+  sections: ProjectSectionItem[]
   tasks: ProjectTemplateTaskItem[]
 }
 
@@ -56,6 +64,8 @@ export interface ProjectTaskItem {
   id: number
   title: string
   description: string | null
+  /** Null = no section. Tasks come back already grouped in section order. */
+  section: string | null
   assigneeId: string | null
   assigneeName: string | null
   status: ProjectTaskStatus

@@ -14,6 +14,7 @@ export default defineEventHandler(async (event) => {
     return await addProjectTask(db, access, {
       ...parsed.data,
       description: parsed.data.description ?? null,
+      sectionId: parsed.data.sectionId ?? null,
       assigneeId: parsed.data.assigneeId ?? null
     })
   } catch (err) {

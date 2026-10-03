@@ -47,6 +47,22 @@ export const projectTypes = pgTable(
   table => [uniqueIndex('project_types_name_ci_unique').on(sql`lower(${table.name})`)]
 )
 
+/**
+ * Sections group tasks (Marketing, Quality, Purchasing...). One admin-managed,
+ * ordered list shared by every project type. Switched off, never deleted.
+ */
+export const projectSections = pgTable(
+  'project_sections',
+  {
+    id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+    name: text('name').notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+  },
+  table => [uniqueIndex('project_sections_name_ci_unique').on(sql`lower(${table.name})`)]
+)
+
 /** The master task list, shared by every project type. */
 export const projectTemplateTasks = pgTable(
   'project_template_tasks',
@@ -54,6 +70,7 @@ export const projectTemplateTasks = pgTable(
     id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
     title: text('title').notNull(),
     description: text('description'),
+    sectionId: integer('section_id').references(() => projectSections.id, { onDelete: 'set null' }),
     // A named person; can be changed per project.
     defaultAssigneeId: uuid('default_assignee_id').references(() => profiles.id, { onDelete: 'set null' }),
     // Lead Time: working days allowed once the task unlocks.
@@ -154,6 +171,9 @@ export const projectTasks = pgTable(
     templateTaskId: integer('template_task_id').references(() => projectTemplateTasks.id, { onDelete: 'set null' }),
     title: text('title').notNull(),
     description: text('description'),
+    // Frozen copies of the section's name and position when the task was created.
+    sectionName: text('section_name'),
+    sectionOrder: integer('section_order').notNull().default(1000000),
     assigneeId: uuid('assignee_id').references(() => profiles.id, { onDelete: 'set null' }),
     status: projectTaskStatus('status').notNull().default('todo'),
     leadTimeDays: integer('lead_time_days').notNull().default(1),
