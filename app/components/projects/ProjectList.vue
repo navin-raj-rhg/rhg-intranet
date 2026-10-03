@@ -88,9 +88,12 @@ const percent = (p: ProjectListItem) => {
           :data-testid="`project-row-${p.id}`"
         >
           <div class="min-w-0 flex-1">
-            <p class="font-medium text-highlighted break-words">
+            <NuxtLink
+              :to="`/tools/projects/${p.id}`"
+              class="font-medium text-highlighted break-words hover:underline"
+            >
               {{ p.name }}
-            </p>
+            </NuxtLink>
             <p class="text-xs text-muted">
               {{ p.typeName ?? 'Blank project' }} · owner {{ p.ownerName }} · starts {{ formatDateMY(p.startDate) }}<template v-if="p.targetDate">
                 · target {{ formatDateMY(p.targetDate) }}
