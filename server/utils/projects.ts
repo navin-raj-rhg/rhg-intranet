@@ -4,6 +4,7 @@ import type { useDb } from '~~/server/db/client'
 import {
   profiles,
   projectComments,
+  projectFiles,
   projectMembers,
   projectSections,
   projectTaskDeps,
@@ -17,6 +18,13 @@ import {
   leavePublicHolidays
 } from '~~/server/db/schema'
 import { todayISO } from '~~/server/utils/leaveBalance'
+import { buildObjectKey, deleteObject, getDownloadUrl, getUploadUrl, headObjectSize } from '~~/server/utils/r2'
+import {
+  canRemoveProjectFile,
+  projectFileContentType,
+  projectFileProblem,
+  tidyProjectFileName
+} from '~~/shared/utils/projectFiles'
 import { isValidISODate } from '~~/shared/utils/leaveRules'
 import {
   addWorkingDaysISO,
@@ -42,6 +50,7 @@ import {
 } from '~~/shared/utils/projectRules'
 import type {
   ProjectCommentItem,
+  ProjectFileItem,
   ProjectListItem,
   ProjectMyTaskItem,
   ProjectPerson,
@@ -58,6 +67,7 @@ type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
 export const PROJECTS_TOOL_ID = 'projects'
 /** Every role on the tool. */
 export const PROJECTS_ROLES = ['user', 'admin']
+const PROJECTS_STORAGE_FOLDER = 'projects'
 
 export class ProjectError extends Error {
   constructor(public status: number, message: string) {
@@ -448,6 +458,14 @@ export async function loadProjectView(db: Db | Tx, access: ProjectAccess): Promi
         .groupBy(projectComments.taskId)
     : []
 
+  const fileCounts = taskIds.length
+    ? await db
+        .select({ taskId: projectFiles.taskId, n: sql<number>`count(*)::int` })
+        .from(projectFiles)
+        .where(inArray(projectFiles.taskId, taskIds))
+        .groupBy(projectFiles.taskId)
+    : []
+
   const today = todayISO()
   const statuses = tasks.map(t => ({ key: String(t.id), status: t.status }))
   return {
@@ -480,7 +498,8 @@ export async function loadProjectView(db: Db | Tx, access: ProjectAccess): Promi
         overdue: isTaskOverdue(t, today),
         dependsOn,
         completedAt: t.completedAt ? t.completedAt.toISOString() : null,
-        commentCount: comments.find(c => c.taskId === t.id)?.n ?? 0
+        commentCount: comments.find(c => c.taskId === t.id)?.n ?? 0,
+        fileCount: fileCounts.find(c => c.taskId === t.id)?.n ?? 0
       }
     })
   }
@@ -660,7 +679,13 @@ export async function setProjectMembers(db: Db, access: ProjectAccess, memberIds
 
 export async function deleteProject(db: Db, access: ProjectAccess) {
   if (!access.isAdmin) throw new ProjectError(403, 'Only an admin can delete a project.')
+  const files = await db
+    .select({ key: projectFiles.r2Key })
+    .from(projectFiles)
+    .innerJoin(projectTasks, eq(projectTasks.id, projectFiles.taskId))
+    .where(eq(projectTasks.projectId, access.project.id))
   await db.delete(projects).where(eq(projects.id, access.project.id))
+  await Promise.all(files.map(f => deleteObject(f.key).catch(() => {})))
 }
 
 /* ------------------------------------------------------------------ */
@@ -827,9 +852,11 @@ export async function deleteProjectTask(db: Db, access: ProjectAccess, taskId: n
         if (t.dependsOn.length) await tx.insert(projectTaskDeps).values(t.dependsOn.map(d => ({ taskId: Number(t.key), dependsOnTaskId: Number(d) })))
       }
     }
+    const files = await tx.select({ key: projectFiles.r2Key }).from(projectFiles).where(eq(projectFiles.taskId, taskId))
     await tx.delete(projectTasks).where(eq(projectTasks.id, taskId))
     await dateNewlyFreeTasks(tx, bridged, holidays, todayISO())
-  })
+    return files
+  }).then(files => Promise.all(files.map(f => deleteObject(f.key).catch(() => {}))))
 }
 
 /**
@@ -918,4 +945,109 @@ export async function addTaskComment(db: Db, projectId: number, taskId: number, 
   if (!body) throw new ProjectError(400, 'Write a comment first.')
   const [row] = await db.insert(projectComments).values({ taskId, authorId, body }).returning({ id: projectComments.id })
   return row!
+}
+
+/* ------------------------------------------------------------------ */
+/* Files                                                               */
+/* ------------------------------------------------------------------ */
+
+export async function listTaskFiles(db: Db, access: ProjectAccess, userId: string, taskId: number): Promise<ProjectFileItem[]> {
+  await failIfTaskNotInProject(db, access.project.id, taskId)
+  const rows = await db
+    .select({
+      id: projectFiles.id,
+      fileName: projectFiles.fileName,
+      sizeBytes: projectFiles.sizeBytes,
+      uploadedBy: projectFiles.uploadedBy,
+      createdAt: projectFiles.createdAt,
+      name: profiles.fullName,
+      email: profiles.email
+    })
+    .from(projectFiles)
+    .innerJoin(profiles, eq(profiles.id, projectFiles.uploadedBy))
+    .where(eq(projectFiles.taskId, taskId))
+    .orderBy(asc(projectFiles.createdAt), asc(projectFiles.id))
+  return rows.map(r => ({
+    id: r.id,
+    fileName: r.fileName,
+    sizeBytes: r.sizeBytes,
+    uploadedByName: personName(r.name, r.email),
+    createdAt: r.createdAt.toISOString(),
+    canRemove: canRemoveProjectFile({ userId, uploadedBy: r.uploadedBy, canManage: access.canManage })
+  }))
+}
+
+/** Step 1 of attaching a file: approve the type and size, return a short-lived link that takes exactly that size. */
+export async function createTaskFileUpload(
+  db: Db,
+  access: ProjectAccess,
+  taskId: number,
+  file: { fileName: string, sizeBytes: number }
+) {
+  failIfClosed(access)
+  await failIfTaskNotInProject(db, access.project.id, taskId)
+  const fileName = tidyProjectFileName(file.fileName)
+  const problem = projectFileProblem(fileName, file.sizeBytes)
+  if (problem) throw new ProjectError(400, problem)
+  const contentType = projectFileContentType(fileName)
+  const key = buildObjectKey(PROJECTS_STORAGE_FOLDER, fileName)
+  const uploadUrl = await getUploadUrl(key, contentType, 300, file.sizeBytes)
+  return { uploadUrl, key, contentType }
+}
+
+/** Step 3: after the browser has uploaded, confirm the file is really there at an allowed size, then record it. */
+export async function registerTaskFile(
+  db: Db,
+  access: ProjectAccess,
+  userId: string,
+  taskId: number,
+  file: { key: string, fileName: string }
+) {
+  failIfClosed(access)
+  await failIfTaskNotInProject(db, access.project.id, taskId)
+  if (!file.key.startsWith(`${PROJECTS_STORAGE_FOLDER}/`) || file.key.includes('..')) {
+    throw new ProjectError(400, 'That is not a project file.')
+  }
+  const size = await headObjectSize(file.key)
+  if (size === null) throw new ProjectError(400, 'The file did not finish uploading. Please try again.')
+  const fileName = tidyProjectFileName(file.fileName)
+  const problem = projectFileProblem(fileName, size)
+  if (problem) {
+    await deleteObject(file.key).catch(() => {})
+    throw new ProjectError(400, problem)
+  }
+  const [taken] = await db.select({ id: projectFiles.id }).from(projectFiles).where(eq(projectFiles.r2Key, file.key))
+  if (taken) throw new ProjectError(409, 'That file is already attached.')
+
+  const [row] = await db
+    .insert(projectFiles)
+    .values({ taskId, r2Key: file.key, fileName, contentType: projectFileContentType(fileName), sizeBytes: size, uploadedBy: userId })
+    .returning({ id: projectFiles.id })
+  return row!
+}
+
+export async function deleteTaskFile(db: Db, access: ProjectAccess, userId: string, taskId: number, fileId: number) {
+  failIfClosed(access)
+  const [file] = await db
+    .select({ id: projectFiles.id, key: projectFiles.r2Key, uploadedBy: projectFiles.uploadedBy })
+    .from(projectFiles)
+    .innerJoin(projectTasks, eq(projectTasks.id, projectFiles.taskId))
+    .where(and(eq(projectFiles.id, fileId), eq(projectFiles.taskId, taskId), eq(projectTasks.projectId, access.project.id)))
+  if (!file) throw new ProjectError(404, 'That file no longer exists.')
+  if (!canRemoveProjectFile({ userId, uploadedBy: file.uploadedBy, canManage: access.canManage })) {
+    throw new ProjectError(403, 'Only the person who attached this file, the project owner or an admin can remove it.')
+  }
+  await db.delete(projectFiles).where(eq(projectFiles.id, fileId))
+  await deleteObject(file.key).catch(() => {})
+}
+
+/** A short-lived link to open one file (members, admins and the owner only). */
+export async function taskFileDownloadUrl(db: Db, access: ProjectAccess, taskId: number, fileId: number) {
+  const [file] = await db
+    .select({ key: projectFiles.r2Key })
+    .from(projectFiles)
+    .innerJoin(projectTasks, eq(projectTasks.id, projectFiles.taskId))
+    .where(and(eq(projectFiles.id, fileId), eq(projectFiles.taskId, taskId), eq(projectTasks.projectId, access.project.id)))
+  if (!file) throw new ProjectError(404, 'That file no longer exists.')
+  return { downloadUrl: await getDownloadUrl(file.key, 300) }
 }

@@ -6,7 +6,7 @@ import type { ProjectTaskStatus } from '~~/shared/utils/projectRules'
  * One project (Step 16.7): its tasks as a list grouped by section, or as a
  * board (To do / In progress / Done). A task that is waiting for others shows as
  * Blocked with no due date; when the last task it waits for is finished it
- * unlocks and gets its date. Comments and files come in 16.8.
+ * unlocks and gets its date. Each task's dialog also holds its comments and attached files (16.8).
  */
 
 const props = defineProps<{ projectId: number, isAdmin: boolean }>()
@@ -339,6 +339,9 @@ const statusColor: Record<ProjectTaskStatus, 'neutral' | 'info' | 'success'> = {
                   <template v-if="t.commentCount">
                     · {{ t.commentCount }} comment{{ t.commentCount === 1 ? '' : 's' }}
                   </template>
+                  <template v-if="t.fileCount">
+                    · {{ t.fileCount }} file{{ t.fileCount === 1 ? '' : 's' }}
+                  </template>
                 </p>
                 <p
                   v-if="t.blocked"
@@ -450,6 +453,7 @@ const statusColor: Record<ProjectTaskStatus, 'neutral' | 'info' | 'success'> = {
       :task="editing"
       @saved="refresh"
       @deleted="refresh"
+      @activity="refresh"
     />
     <ProjectsSettingsDialog
       v-if="project.canManage"

@@ -11,7 +11,7 @@ import { MAX_TASK_LEAD_TIME_DAYS, PROJECT_TEXT_MAX, PROJECT_TITLE_MAX } from '~~
 
 const props = defineProps<{ project: ProjectView, task: ProjectTaskItem | null }>()
 const open = defineModel<boolean>('open', { required: true })
-const emit = defineEmits<{ saved: [], deleted: [] }>()
+const emit = defineEmits<{ saved: [], deleted: [], activity: [] }>()
 
 const toast = useToast()
 const NO_ONE = '__none'
@@ -185,6 +185,17 @@ async function remove() {
           />
         </UFormField>
       </form>
+
+      <!-- Comments and files belong to a saved task, so they appear when editing. -->
+      <ProjectsTaskDiscussion
+        v-if="task"
+        :key="task.id"
+        class="mt-6"
+        :project-id="project.id"
+        :task-id="task.id"
+        :editable="project.status === 'open'"
+        @changed="emit('activity')"
+      />
     </template>
 
     <template #footer>

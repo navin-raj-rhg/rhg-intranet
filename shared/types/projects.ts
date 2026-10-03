@@ -77,6 +77,7 @@ export interface ProjectTaskItem {
   dependsOn: number[]
   completedAt: string | null
   commentCount: number
+  fileCount: number
 }
 
 export interface ProjectView {
@@ -102,6 +103,16 @@ export interface ProjectCommentItem {
   authorName: string
   body: string
   createdAt: string
+}
+
+export interface ProjectFileItem {
+  id: number
+  fileName: string
+  sizeBytes: number
+  uploadedByName: string
+  createdAt: string
+  /** Whether the signed-in person may remove it. */
+  canRemove: boolean
 }
 
 /** The result of changing a task's status. */

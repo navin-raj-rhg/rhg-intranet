@@ -75,3 +75,13 @@ export const commentBodySchema = z.object({
 export function bodyProblem(parsed: { success: boolean, error?: { issues: { message: string }[] } }): string {
   return parsed.success ? '' : (parsed.error?.issues[0]?.message ?? 'That request was not valid.')
 }
+
+export const fileUploadBodySchema = z.object({
+  fileName: z.string({ message: 'Choose a file' }).min(1, 'Choose a file').max(255),
+  sizeBytes: z.number({ message: 'Choose a file' }).int()
+})
+
+export const fileRegisterBodySchema = z.object({
+  key: z.string().min(1).max(500),
+  fileName: z.string().min(1).max(255)
+})
