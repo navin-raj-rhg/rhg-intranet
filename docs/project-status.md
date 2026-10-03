@@ -652,13 +652,11 @@ and Inspection Reporting (Step 12) are done.
 
 - **Step 12 - Inspection Reporting** ✅ done (see above)
 
-- **Product Data tool** (Navin's own note, not yet scoped) - a product
-  information tool similar to Tech File and Plytix. Gets a Step number when
-  scheduled.
+- **Product Information Management (PIM)** (Navin's own note; renamed from "Product Data") - a
+  product information tool similar to Tech File and Plytix. Scheduled as Step 17 (see Phase 4).
 
 Other tools from the original vision - container planning via Cargo Planner
-API, PowerBI-style data charts, project management - remain on the list for
-after Phase 3 or later; they get a step number when they are scheduled.
+API, PowerBI-style data charts, project management - are now scheduled as Steps 16-20 (Phase 4).
 
 **Do at the start of each tool:** decide its roles. Leave uses `employee` +
 `manager` (so links apply automatically); Cost Modelling uses `user` + `admin`
@@ -734,14 +732,26 @@ limited to the company domains (Step 15), so the demo is safe to show meanwhile.
 **project management, replacing Asana (about 2k AUD per year for 20 seats).** Other figures are
 not yet collected.
 
-- **Step 16 (next) - choose and build the next tool.** At the start of the session Navin lists
-  the SaaS apps RHG pays for (name, rough yearly cost, what the team actually uses it for) and
-  Claude proposes which to replace first, weighing the saving against how much of the app's
-  features really get used. Candidates already on the list: Product Data (Tech File / Plytix
-  style), container planning (Cargo Planner API), PowerBI-style charts, project management (Asana
-  replacement, ~2k AUD/yr for 20 seats).
-  Also consider hardening the existing tools (backlog above) where it makes them better than the
-  SaaS they replace - e.g. Inspection Reporting's Non-Conformance dialog and follow-up actions.
+**Order agreed with Navin (start of Step 16):**
+
+- **Step 16 (next) - Project management** (replaces Asana, about 2k AUD/yr for 20 seats).
+  Built as a generic "Projects" tool with admin-managed project types (Live, Promo and CSO
+  launches seeded). Each task has a **Lead Time** (working days): when it unlocks, due date = day
+  unblocked + Lead Time. **Project status reporting** (one project; and all open projects for
+  admins) is wanted but deferred - do it after the main Step 16 sub-steps, as its own sub-step or
+  a later Step.
+- **Step 17 - Product Information Management (PIM)**, replacing Plytix (Tech File style). RHG used
+  to pay for Plytix, roughly **500 AUD/month (about 6k/yr) - Navin is not sure; confirm the real
+  figure before it goes in the business case.**
+- **Step 18 - Container planning.** Replaces manual Excel calculations (no SaaS being cancelled).
+  The tool produces data that **feeds Cargo Planner**, which RHG will pay for - so it is a new
+  cost, not a saving; do not count it in the "SaaS replaced" total.
+- **Step 19 - Dashboard widgets.**
+- **Step 20 - PowerBI-style data charts.**
+
+Hardening existing tools (backlog above, e.g. Inspection Reporting's Non-Conformance dialog and
+follow-up actions) is **not** part of Step 16; it gets its own step later (Navin agreed).
+Each Step starts with its own decisions list and sub-steps, as usual.
 - **Later - a "cost comparison" view** for the pitch (apps replaced, yearly SaaS cost, running
   cost of the intranet). Needs real numbers from Navin; do not invent any.
 
