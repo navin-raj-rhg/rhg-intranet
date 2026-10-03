@@ -59,6 +59,21 @@ const approvalItems = computed(() => {
   return items
 })
 
+// Projects: tasks assigned to this person that are ready to work on.
+const projectsTool = (tools ?? []).find(t => t.id === 'projects')
+interface MyProjectTask { id: number, title: string, overdue: boolean }
+const { data: myTasks } = await useAsyncData('dashboard-my-project-tasks', () =>
+  projectsTool
+    ? useApiFetch<MyProjectTask[]>('/api/tools/projects/my-tasks').catch(() => [] as MyProjectTask[])
+    : Promise.resolve([] as MyProjectTask[])
+)
+const myTasksOverdue = computed(() => (myTasks.value ?? []).filter(t => t.overdue).length)
+const myTasksText = computed(() => {
+  const n = myTasks.value?.length ?? 0
+  const base = `${n} ${n === 1 ? 'task is' : 'tasks are'} assigned to you and ready to start.`
+  return myTasksOverdue.value ? `${base} ${myTasksOverdue.value} ${myTasksOverdue.value === 1 ? 'is' : 'are'} overdue.` : base
+})
+
 async function claimOwner() {
   claimingOwner.value = true
   try {
@@ -142,6 +157,26 @@ async function claimOwner() {
           :to="item.route"
         >
           Review {{ item.id === 'leave-applications' ? 'leave' : 'expense claims' }}
+        </UButton>
+      </template>
+    </UAlert>
+
+    <UAlert
+      v-if="projectsTool && myTasks?.length"
+      class="mt-6"
+      :color="myTasksOverdue ? 'error' : 'warning'"
+      variant="subtle"
+      icon="i-lucide-list-checks"
+      title="Tasks waiting for you"
+      :description="myTasksText"
+      data-testid="my-tasks-banner"
+    >
+      <template #actions>
+        <UButton
+          size="sm"
+          :to="`${projectsTool.route}?tab=mine`"
+        >
+          See my tasks
         </UButton>
       </template>
     </UAlert>

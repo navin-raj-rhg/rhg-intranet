@@ -7,11 +7,12 @@ const { data: role, pending, error } = await useAsyncData('projects-my-role', ()
   useApiFetch<ProjectsMyRoleResponse>('/api/tools/projects/my-role')
 )
 
-type TabValue = 'projects' | 'tasks' | 'types'
+type TabValue = 'projects' | 'mine' | 'tasks' | 'types'
 
 // Admins also get the master Task list and Project types. ?tab= opens straight on one.
 const tabItems = computed<{ label: string, value: TabValue }[]>(() => [
   { label: 'Projects', value: 'projects' },
+  { label: 'My tasks', value: 'mine' },
   ...(role.value?.isAdmin
     ? [
         { label: 'Task list', value: 'tasks' as const },
@@ -22,7 +23,7 @@ const tabItems = computed<{ label: string, value: TabValue }[]>(() => [
 
 const route = useRoute()
 const wanted = route.query.tab
-const tab = ref<TabValue>(wanted === 'tasks' || wanted === 'types' ? wanted : 'projects')
+const tab = ref<TabValue>(wanted === 'mine' || wanted === 'tasks' || wanted === 'types' ? wanted : 'projects')
 const shownTab = computed<TabValue>(() => (tabItems.value.some(t => t.value === tab.value) ? tab.value : 'projects'))
 
 // A type added or renamed on one tab shows up on the other.
@@ -95,6 +96,12 @@ const typesChanged = () => refreshNuxtData('projects-template')
         class="mt-6"
       >
         <ProjectsProjectList :is-admin="!!role?.isAdmin" />
+      </div>
+      <div
+        v-show="shownTab === 'mine'"
+        class="mt-6"
+      >
+        <ProjectsMyTasks />
       </div>
       <div
         v-if="role?.isAdmin"
