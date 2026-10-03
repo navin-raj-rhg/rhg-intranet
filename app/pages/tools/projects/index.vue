@@ -45,10 +45,17 @@ const typesChanged = () => refreshNuxtData('projects-template')
       description="Product launches and other projects as task lists with dependencies: a task unlocks, and gets its due date, when the tasks it waits for are done."
     >
       <template
-        v-if="authStore.profile?.isOwner"
+        v-if="authStore.profile?.isOwner || role?.canCreate"
         #links
       >
         <UButton
+          v-if="role?.canCreate"
+          to="/tools/projects/new"
+          icon="i-lucide-plus"
+          label="New project"
+        />
+        <UButton
+          v-if="authStore.profile?.isOwner"
           to="/tools/projects/access"
           icon="i-lucide-users"
           variant="outline"
@@ -87,12 +94,7 @@ const typesChanged = () => refreshNuxtData('projects-template')
         v-show="shownTab === 'projects'"
         class="mt-6"
       >
-        <UAlert
-          color="info"
-          variant="subtle"
-          title="Starting and working on projects comes next"
-          description="For now, admins can set up the project types and the master task list."
-        />
+        <ProjectsProjectList :is-admin="!!role?.isAdmin" />
       </div>
       <div
         v-if="role?.isAdmin"
