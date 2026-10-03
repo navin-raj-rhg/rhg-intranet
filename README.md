@@ -1158,3 +1158,114 @@ delete from public.allowed_signup_emails where entry = 'newdomain.com.au';    --
 the login page's input settings and the new sign-up heading in the browser pane. The
 database guard, the refusal message on the live site and the confirmation email need the
 real Supabase and were tested by Navin.
+
+## Step 16: Projects
+
+The fifth full tool, replacing Asana. It is a **generic project tool** built first for **product
+launches** (Live, Promo and CSO): the same tasks recur on every launch and a launch type just leaves
+some out. What Asana couldn't do is here: **tasks wait for other tasks, and a task only gets a due date
+when the tasks it waits for are finished.** Built in sub-steps 16.1 to 16.11 with Claude Code; Navin
+tested each stop.
+
+### Roles, privacy and views
+
+- **Roles** (tool: `projects`): `user` and `admin`; the owner bypasses as everywhere. No employee/manager
+  links, so Manage access shows two tickboxes.
+- **Users** start projects and work on tasks in projects they belong to. **Admins** also build the
+  project types, sections and master task list, and can see and manage every project.
+- **Projects are private to their members** (plus admins and the owner). The person who starts a project
+  is its owner and can change its settings and members, close or reopen it, and delete tasks. Only an
+  admin can delete a whole project.
+- **Screens:** the **Projects** tab (list with progress, overdue and **At risk**; open / closed filter;
+  admins can show every project), **My tasks**, and for admins **Task list** and **Types & sections**. A
+  project opens as a **List** (grouped by section) or a **Board** (To do / In progress / Done).
+
+### How due dates work (all in `shared/utils/projectRules.ts`, unit tested)
+
+- **Project types** are an admin-managed list (Live, Promo and CSO seeded). **One master task list** is
+  shared by every type; each task is **ticked for the types it applies to**, sits in a **section**, has a
+  default person, a **Lead Time** (working days) and the tasks it waits for.
+- **Starting a project** copies the ticked tasks. Links are **bridged** over the left-out tasks (A -> B -> C
+  without B becomes A -> C). Tasks with nothing to wait for get a due date of **start date + Lead Time**;
+  the rest are **Blocked** with no date. A project with no type is a **blank project** (add tasks by hand).
+- **Finishing a task** unlocks any task that was waiting only for it: due date = **that day + its Lead
+  Time**. A task with two predecessors unlocks when the later one is finished.
+- **Working days** are Monday to Friday, skipping the Leave **public holidays**. A Lead Time of 0 means the
+  same day (or the next working day if that is a weekend or holiday).
+- **Reopening** a Done task puts unstarted dependents back to Blocked (date cleared); ones already in
+  progress or done are left alone and the screen says so.
+- **At risk:** any open task is overdue, or already due after the project's optional **target date**. The
+  target date is a flag only and never moves a due date.
+- Also tested there: loop detection (tasks waiting for each other), unknown / self links, who may change
+  a task's status (its assignee, the project owner or an admin), and a blocked task can't be started.
+
+### Tasks, comments and files
+
+- Anyone in a project can **add a one-off task** (any section, assignee, Lead Time, "waits for"), **edit** a
+  task, comment, and attach files. The owner or an admin can delete a task (tasks that waited for it
+  inherit its links and are dated if they become free).
+- **Assignees must be project members**; people given a task by the master list are added automatically.
+  A member can't be removed while they still have unfinished tasks.
+- **Files** use the same three-step upload as Inspection Reporting photos (server approves, browser
+  uploads to R2, server confirms): up to **20 MB**, images / PDF / Word / Excel / PowerPoint / CSV / text /
+  ZIP (`shared/utils/projectFiles.ts`; allowed by extension, never by what the browser claims). Key
+  `projects/<yyyy>/<mm>/<uuid>-<name>`; only project members get a download link. Deleting a file, task or
+  project removes the stored file; the **Storage clean-up** page knows about the `projects/` folder.
+- **Closed projects** can be read but not changed until reopened.
+- **Dashboard:** a banner "Tasks waiting for you" counts tasks assigned to you that are ready to start
+  (not blocked, not done, in open projects) and links to **My tasks**.
+
+### How it fits together
+
+- **Schema** `server/db/schema/projects.ts`: `project_types`, `project_sections`, `project_template_tasks`,
+  `project_template_task_types`, `project_template_task_deps`, `projects`, `project_members`,
+  `project_tasks` (frozen section name / position, Lead Time, due date), `project_task_deps`,
+  `project_comments`, `project_files`. Migrations `0012_secret_namor.sql` (tables) and
+  `0013_cheerful_talos.sql` (sections).
+- **Pure logic** `shared/utils/projectRules.ts`, `shared/utils/projectFiles.ts`; API types in
+  `shared/types/projects.ts`.
+- **Server** `server/utils/projects.ts` (all the work: types, sections, master list, access, list / view,
+  create, edit, status changes, files, comments) and `projectBodies.ts` (request checks). Status changes
+  lock the project row inside a transaction.
+- **API** under `server/api/tools/projects/`: `my-role`, `people`, `my-tasks`; `types` and `sections`
+  (GET, POST, `[id]` PUT; `sections/order` PUT); `template` (GET, PUT: the whole master list in one go);
+  `index` (GET, POST), `[id]` (GET, PUT, DELETE), `[id]/status`, `[id]/members`, `[id]/tasks` (POST),
+  `[id]/tasks/[taskId]` (PUT, DELETE), `.../status`, `.../comments`, `.../files` (GET, POST,
+  `upload-url`, `[fileId]` DELETE, `[fileId]/download-url`). Every route uses `requireToolRole` and the
+  `roles` array; non-members get "does not exist".
+- **Pages** `app/pages/tools/projects/`: `index.vue` (tabs), `new.vue`, `[id].vue`, `access.vue`.
+- **Components** `app/components/projects/`: `ProjectList`, `NewProjectForm`, `ProjectView`, `TaskDialog`,
+  `TaskActions`, `TaskDiscussion`, `SettingsDialog`, `MyTasks`, `TemplateAdmin`, `TypesAdmin`,
+  `SectionsAdmin`; `app/composables/useProjectFiles.ts`; the dashboard banner is in `app/pages/index.vue`.
+- **Tests:** `pnpm test` now runs **166** tests (32 new: `projectRules.test.ts`, `projectFiles.test.ts` and
+  a storage-folder check).
+
+### One-time setup after applying this step
+
+1. `pnpm db:migrate` (migrations 0012 and 0013). Run locally - Railway does not migrate. **Run it before
+   pushing code that needs it.**
+2. Supabase SQL Editor: run `server/db/manual-sql/009_seed_projects.sql` (registers the tool, its two
+   roles and the three launch types). Safe to re-run.
+3. Give people **User** (and a few **Admin**) in Projects -> Manage access.
+4. As an admin, add the **sections** (Types & sections), then build the **master task list** (Task list)
+   and tick the project types each task applies to. Nothing can start from a type until it has tasks.
+
+### Known limitations (fine for the demo)
+
+- **No status reporting yet** (one project, and all open projects for admins): wanted, deferred.
+- Due dates can't be edited by hand; a task's Lead Time only applies when it unlocks.
+- No subtasks, recurring tasks, Gantt / timeline, calendar view, drag-and-drop board or time tracking.
+- Project types and sections can only be switched off in the app (deleted by SQL).
+- Notifications are in-app only (no email until a mail provider exists).
+- Comments can't be edited or deleted; files can't be renamed.
+- The people list (for members and assignees) is visible to everyone with a Projects role.
+
+**Verified:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (166 tests) and `pnpm build` pass. Claude exercised the
+API against the real Supabase and R2 with temporary data (master list, sections and ordering, starting
+projects, blocking, unlocking and reopening with the working-day dates, one-off tasks, comments, file
+upload / download / removal and cleanup with the project, refusals for blocked tasks, loops, bad files)
+and drove every screen in the browser pane at desktop width, plus a phone-width check of every Projects
+page for sideways scrolling. **Not verified by Claude:** role refusals for non-owner accounts (the owner
+bypasses every check and Claude can't sign in as other users - covered by unit tests and code review, with
+Navin's multi-account test as the end-to-end check). All test data was removed afterwards; Navin cleared the
+rest of the Projects data in the Supabase SQL editor.

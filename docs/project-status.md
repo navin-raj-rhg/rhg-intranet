@@ -1,4 +1,4 @@
-# RHG Intranet — Project Status (updated through Step 15)
+# RHG Intranet — Project Status (updated through Step 16)
 
 > **Where this lives:** `docs/project-status.md` in the repo is the source of
 > truth (Claude Code reads it via `CLAUDE.md`). Navin may also keep a copy in
@@ -13,9 +13,9 @@ case proposal to directors before company-wide rollout approval, deployed as a
 live URL.
 
 **Numbering convention (use this when talking to Claude):** everything is a
-numbered **Step** (Step 1 ... Step 15 done, Step 16 next), with sub-steps like 10.4. The
+numbered **Step** (Step 1 ... Step 16 done, Step 17 next), with sub-steps like 10.4. The
 **Phases** group the steps. Refer to work by step number, e.g. "let's do
-Step 15" or "back to 11.8b". Steps 1-15 are done; Step 16 and later are the agreed
+Step 15" or "back to 11.8b". Steps 1-16 are done; Step 17 and later are the agreed
 roadmap and have not been started.
 
 ## Live demo
@@ -123,7 +123,7 @@ The short version of these rules is in `CLAUDE.md` at the repo root.
 - **File storage:** Cloudflare R2 (S3-compatible), accessed via presigned URLs
 - **PDF generation:** `pdfkit` (expense-claims payroll report; inspection reports)
 - **Tests:** `pnpm test` runs Node's built-in test runner over `tests/*.test.ts`
-  (pure logic only, no database) - **134 tests as of Step 15**.
+  (pure logic only, no database) - **166 tests as of Step 16**.
 - **Package manager:** pnpm
 - **Hosting:** Railway (Node server), auto-deploying from `main`
 
@@ -240,6 +240,7 @@ pattern spreads.
 | 13. Styling and clean-ups | ✅ Done (13.2-13.13) | RHG look, loading bar and faster requests, manager approvals banner, deactivate user, leave public holidays, cost model PDF and Setup tab, storage clean-up, many small fixes (see below) |
 | 14. Cookie-based sessions | ✅ Done (14.1-14.7) | `@supabase/ssr` cookies instead of the Bearer header, server-side redirect of signed-out page requests (see below) |
 | 15. Sign-up restriction | ✅ Done (15.1-15.5) | Only allowed company email domains (or listed single addresses) can create an account; enforced in the database (see below) |
+| 16. Projects | ✅ Done (16.1-16.11) | Project management for product launches: project types, master task list with sections, dependencies with automatic due dates, list and board, comments and files, dashboard banner (see below) |
 
 ### Step 11: Cost Modelling (complete)
 
@@ -550,6 +551,86 @@ first.
 - Claude could not sign in or sign up against the real Supabase; Navin tested the refusal and
   the confirmation email.
 
+### Step 16: Projects (complete)
+
+Sub-steps: 16.1 decisions, 16.2 rules + tests, 16.3 database (migration 0012, seed 009), 16.4 API,
+16.5 admin screens (Task list, Project types), 16.5b sections (migration 0013), 16.6 project list and
+"New project", 16.7 project view (list and board), 16.8 comments and files, 16.9 dashboard banner and
+My tasks, 16.10 full check, 16.11 docs. Committed and pushed sub-step by sub-step when Navin asked.
+The repo `README.md` has the technical write-up.
+
+**What it is:** a generic **Projects** tool (replacing Asana, about 2k AUD/yr) built first for **product
+launches**: Live, Promo and CSO. Tasks are the same across launches; a launch type just leaves some out.
+Its point is the automation Asana couldn't do: **dependencies, and due dates handed out only when a task
+unlocks.**
+
+**Roles** (tool id `projects`): `user` (start projects; work on tasks in projects they belong to) and
+`admin` (build the project types, sections and master task list; see and manage every project). Owner
+bypasses both. No manager links, so Manage access shows two tickboxes. **Projects are private to their
+members** (plus admins and the owner); each has an owner.
+
+**Decisions (Navin's, all as recommended unless noted):**
+- **Generic, not launch-only:** project types are admin-managed (Live, Promo and CSO seeded; Navin added
+  others). A project with no type is a **blank project** whose tasks are added by hand.
+- **One master task list** shared by every type; each task is **ticked for the types it applies to**.
+  Starting a project copies the ticked tasks, so later edits never change running projects.
+- **Sections** (Navin's request: Marketing, Quality, Purchasing...): an admin-managed, ordered list. Each
+  master task sits in one; tasks are grouped by section everywhere. Running projects keep a frozen copy
+  of the section name and position.
+- **Dependencies:** a task is **Blocked** until everything it waits for is Done and has no due date.
+  **Lead Time** (Navin's wording; working days, Mon-Fri, skipping the Leave public holidays): when the last
+  task it waits for is finished, due date = **that day + Lead Time**. Tasks with nothing to wait for get
+  start date + Lead Time. A task left out by a project type is **bridged over** (A -> B -> C without B
+  becomes A -> C).
+- **Assignees are named people** (default per task, changeable per project). People given a task are
+  added to the project automatically.
+- **Reopening a Done task:** unstarted tasks that depended on it go back to Blocked and lose their date;
+  ones already in progress or done are left alone with a warning.
+- **Target date** is optional and only drives an **At risk** flag (an open task is overdue or already due
+  after it); it never moves a due date.
+- **Views:** List (grouped by section) and Board (To do / In progress / Done; blocked tasks show a lock).
+  Statuses are fixed: To do, In progress, Done.
+- **Comments and files** on tasks; files go to R2 under `projects/`, 20 MB each, images / PDF / Word /
+  Excel / PowerPoint / CSV / text / ZIP only (by extension; programs and scripts are refused).
+- **Notifications:** in-app only - a dashboard banner "Tasks waiting for you" and a **My tasks** tab.
+- **Project status reporting** (one project; all open projects for admins) is wanted but **deferred**.
+- Hardening other tools is not part of this Step.
+
+**Tables:** `project_types`, `project_sections`, `project_template_tasks`, `project_template_task_types`,
+`project_template_task_deps`, `projects`, `project_members`, `project_tasks`, `project_task_deps`,
+`project_comments`, `project_files`. Migrations `0012_secret_namor.sql` and `0013_cheerful_talos.sql`;
+manual SQL `009_seed_projects.sql` (tool, roles, the three launch types; safe to re-run).
+
+**Patterns worth reusing:**
+- **A master list copied into each record** (as Inspection Reporting copies templates): editing it
+  never changes what is running.
+- **Dependency and due-date logic is pure** (`shared/utils/projectRules.ts`): bridging, loop detection,
+  unlocking, reopening, at-risk. Server and screens share it.
+- **Status changes lock the project row** (`for update`) inside a transaction so two people finishing
+  tasks at once can't corrupt the dates.
+- **Files** use the three-step upload from Inspection Reporting; the storage clean-up page knows about
+  the `projects/` folder so it never flags these files.
+- **Bulk data delete** is run by Navin in the Supabase SQL editor from statements Claude writes.
+
+**Test data:** Navin cleared all Projects data (projects, master tasks, sections) after testing. The
+four project types (Live, Promo, CSO, NPD switched off) remain. **The master task list is empty:** build
+the real tasks and sections in Projects -> Task list / Types & sections before first use.
+
+**Known limitations (acceptable for the demo):**
+- **No status reporting yet** (see Backlog).
+- Due dates can't be edited by hand; a task's Lead Time only applies when it unlocks.
+- No subtasks, recurring tasks, Gantt / timeline, calendar view, drag-and-drop board, or time tracking.
+- Project types and sections can only be switched off, never deleted, from the app (sections and types
+  are removed by SQL).
+- A member can't be removed while they have unfinished tasks (by design); a project's people list is
+  visible to everyone with a Projects role.
+- Notifications are in-app only (no email until a mail provider exists - Phase 5).
+- Comments can't be edited or deleted.
+- Role refusals for non-owner accounts were checked by unit tests and code review, not with a second
+  account by Claude (the owner bypasses every check); Navin's multi-account test is the end-to-end check.
+- Claude checked every screen in the browser pane at desktop and phone width (no sideways scrolling) and
+  exercised the API, files and clean-up against the real database and R2 with temporary data.
+
 ## Step 9 reference (still true)
 
 - Expense-claims specifics: categories are a fixed 7-value enum shared via
@@ -608,12 +689,12 @@ README's Step 10 section.
 - No Microsoft SSO yet - planned before company-wide launch.
 - `NUXT_SUPABASE_DB_URL` (direct connection) is intentionally not set on
   Railway - migrations must be run manually from a local machine after any
-  schema change; a push alone does not apply them (latest: `0011`; Steps 14 and 15 added none). **Order for a
+  schema change; a push alone does not apply them (latest: `0013`; Steps 14 and 15 added none, Step 16 added `0012` and `0013`). **Order for a
   release with a migration that ADDS something: run `pnpm db:migrate` first, then push**
   (the code needs the new tables or columns). **When a migration DROPS something, push
   first, wait for the deploy, then migrate** (as with `0011`). Manual SQL in `server/db/manual-sql/` (001 new-user trigger, 002
   expense-claims seed, 003 deleted-user trigger, 004 leave seed, 005 leave
-  entitlements, 006 cost modelling seed, 007 inspection reporting seed, 008 sign-up domain guard) is run by
+  entitlements, 006 cost modelling seed, 007 inspection reporting seed, 008 sign-up domain guard, 009 projects seed) is run by
   hand in the Supabase SQL editor.
 
 ## Testing setup
@@ -703,6 +784,10 @@ chosen):**
 - A screen to manage the allowed sign-up list (today SQL only); decide whether the guard should
   exempt accounts added by hand in Supabase.
 - Password-save prompt in Edge on the live site (not understood; hand-saving works).
+- Projects (from Step 16): **status reporting** (per project and all open projects for admins);
+  optional manual due-date override; delete-unused for sections and types from the app; email
+  notifications (needs the Phase 5 mail provider); subtasks / recurring tasks / calendar view if the team
+  asks; link a project to products once the PIM (Step 17) exists.
 
 ### Phase 3 - Launch hardening (Steps 14 and 15 done)
 
@@ -734,13 +819,10 @@ not yet collected.
 
 **Order agreed with Navin (start of Step 16):**
 
-- **Step 16 (next) - Project management** (replaces Asana, about 2k AUD/yr for 20 seats).
-  Built as a generic "Projects" tool with admin-managed project types (Live, Promo and CSO
-  launches seeded). Each task has a **Lead Time** (working days): when it unlocks, due date = day
-  unblocked + Lead Time. **Project status reporting** (one project; and all open projects for
-  admins) is wanted but deferred - do it after the main Step 16 sub-steps, as its own sub-step or
-  a later Step.
-- **Step 17 - Product Information Management (PIM)**, replacing Plytix (Tech File style). RHG used
+- **Step 16 - Project management** ✅ done (see above). Built as a generic "Projects" tool. **Project
+  status reporting** (one project; and all open projects for admins) was wanted and is deferred: see
+  the Backlog below - schedule it as its own small Step or sub-step when Navin chooses.
+- **Step 17 (next) - Product Information Management (PIM)**, replacing Plytix (Tech File style). RHG used
   to pay for Plytix, roughly **500 AUD/month (about 6k/yr) - Navin is not sure; confirm the real
   figure before it goes in the business case.**
 - **Step 18 - Container planning.** Replaces manual Excel calculations (no SaaS being cancelled).
