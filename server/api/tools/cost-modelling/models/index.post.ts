@@ -3,6 +3,7 @@ import { useDb } from '~~/server/db/client'
 import { requireToolRole } from '~~/server/utils/requireToolRole'
 import { COST_ROLES, COST_TOOL_ID } from '~~/server/utils/costFactors'
 import { CostModelError, saveCostModel } from '~~/server/utils/costModels'
+import { createMissingPimProducts } from '~~/server/utils/costPimSync'
 import { COST_MODEL_MAX_ROWS } from '~~/shared/utils/costModel'
 
 const cm = z.number().finite().positive('Carton/pallet sizes must be more than 0').max(10_000).nullable()
@@ -39,6 +40,7 @@ const bodySchema = z.object({
 
 // Any Cost Modelling user can save a model. Saved models are final: there is
 // no update route - a change is made by duplicating into a new model.
+// Also adds any product the PIM doesn't have yet (Step 20.3).
 export default defineEventHandler(async (event) => {
   const { profile } = await requireToolRole(event, COST_TOOL_ID, COST_ROLES)
 
@@ -50,7 +52,17 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    return await saveCostModel(useDb(), profile.id, parsed.data)
+    const db = useDb()
+    const saved = await saveCostModel(db, profile.id, parsed.data)
+    // Products the PIM doesn't know yet are added there as Drafts (Step 20.3).
+    // This can't fail the save: problems come back in `pim.skipped`.
+    const pim = await createMissingPimProducts(
+      db,
+      profile.id,
+      { name: saved.name, supplierName: parsed.data.supplierName, categoryId: parsed.data.categoryId, subCategoryId: parsed.data.subCategoryId },
+      parsed.data.rows
+    )
+    return { ...saved, pim }
   } catch (err) {
     if (err instanceof CostModelError) throw createError({ statusCode: err.status, statusMessage: err.message })
     throw err

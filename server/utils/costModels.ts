@@ -20,6 +20,8 @@ import {
   type PackLevelInput
 } from '~~/shared/utils/costModel'
 import { tidyCostName } from '~~/shared/utils/costCategories'
+import { costInputFromPim, costProductNoKey } from '~~/shared/utils/costPimLink'
+import { findPimProductsForCost } from '~~/server/utils/costPimSync'
 import { todayMY } from '~~/shared/utils/dates'
 import type {
   CostModelDetail,
@@ -290,16 +292,39 @@ export async function findCostProducts(db: Db, q: string): Promise<CostProductSu
     .orderBy(sql`lower(${costModelRows.productNo})`, desc(costModels.createdAt), desc(costModelRows.id))
     .limit(200)
 
-  return latest
-    .map(l => ({
+  const byKey = new Map<string, CostProductSuggestion>()
+  for (const l of latest) {
+    byKey.set(costProductNoKey(l.row.productNo), {
       productNo: l.row.productNo!,
       description: l.row.description,
       input: rowInputFromDb(l.row),
       modelId: l.modelId,
       modelName: l.modelName,
       supplierName: l.supplierName,
-      savedAt: l.savedAt.toISOString()
-    }))
+      savedAt: l.savedAt.toISOString(),
+      pim: null
+    })
+  }
+
+  // The PIM's copy (Step 20.3): its description and packaging win over an
+  // earlier cost; prices still come only from the earlier cost.
+  for (const pim of await findPimProductsForCost(db, pattern)) {
+    const key = costProductNoKey(pim.productNo)
+    const earlier = byKey.get(key)
+    const input = costInputFromPim(earlier?.input ?? null, pim.productNo, pim)
+    byKey.set(key, {
+      productNo: pim.productNo,
+      description: input.description,
+      input,
+      modelId: earlier?.modelId ?? null,
+      modelName: earlier?.modelName ?? null,
+      supplierName: earlier?.supplierName ?? null,
+      savedAt: earlier?.savedAt ?? null,
+      pim
+    })
+  }
+
+  return [...byKey.values()]
     .sort((a, b) => {
       const aStarts = a.productNo.toLowerCase().startsWith(term) ? 0 : 1
       const bStarts = b.productNo.toLowerCase().startsWith(term) ? 0 : 1

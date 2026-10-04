@@ -1,7 +1,9 @@
 // Decides whether the server should send a visitor to the login page instead
 // of the app. Pure logic (no h3, no Nitro) so it can be unit tested.
 
-const PUBLIC_PAGES = ['/login']
+// /reset-password is where the emailed "forgot password" link lands; the
+// visitor is signed out until the page has read the link's code.
+const PUBLIC_PAGES = ['/login', '/reset-password']
 
 /** True for a browser asking for a page (not an API call, script, image or other file). */
 export function isPageNavigation(method: string, path: string, accept: string | undefined): boolean {

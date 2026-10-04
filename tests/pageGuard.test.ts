@@ -26,6 +26,7 @@ test('a signed-out visitor is sent to login from any page except login', () => {
   assert.equal(shouldRedirectToLogin('GET', '/login', HTML, false), false)
   assert.equal(shouldRedirectToLogin('GET', '/login/', HTML, false), false)
   assert.equal(shouldRedirectToLogin('GET', '/login?x=1', HTML, false), false)
+  assert.equal(shouldRedirectToLogin('GET', '/reset-password?code=abc', HTML, false), false)
 })
 
 test('a signed-in visitor is never redirected, and API calls are left alone', () => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CostFactorsResponse, CostModelDetail, CostProductSuggestion, SaveCostModelBody } from '~~/shared/types/costModelling'
+import type { CostFactorsResponse, CostModelDetail, CostPimSyncResult, CostProductSuggestion, PimCategoryName, SaveCostModelBody } from '~~/shared/types/costModelling'
 import type { CostCategory } from '~~/shared/utils/costCategories'
 import type { ContainerSize, CostRowResult, PackLevelKey } from '~~/shared/utils/costModel'
 import type { CostFormRow, FormPackLevel } from '~~/shared/utils/costModelForm'
@@ -46,19 +46,69 @@ function copyRow(i: number) {
   const copy = structuredClone(toRaw(rows.value[i]!))
   rows.value.splice(i + 1, 0, { ...copy, key: nextKey++, productNo: '', filledFrom: undefined })
 }
-/** Product look-up (Step 11.8d): fill only this row's empty cells from the last saved version. */
-function fillFromProduct(i: number, product: CostProductSuggestion) {
+/** Product look-up (Step 11.8d, PIM added in 20.3): fill only this row's empty cells from the PIM and the last saved cost. */
+async function fillFromProduct(i: number, product: CostProductSuggestion) {
   const row = rows.value[i]
   if (!row) return
-  const { row: filledRow, filled } = fillEmptyCostFormCells(row, product.input, product.modelName)
+  const source = product.pim && product.modelName
+    ? `the PIM and ${product.modelName}`
+    : (product.pim ? 'the PIM' : (product.modelName ?? 'an earlier cost'))
+  const { row: filledRow, filled } = fillEmptyCostFormCells(row, product.input, source)
   rows.value[i] = filledRow
+  pimStatus[filledRow.key] = product
+  const categoryNote = await fillCategoryFromPim(product)
   toast.add({
     title: filled ? `Filled ${filled} empty cell${filled === 1 ? '' : 's'} from ${product.productNo}` : `Nothing to fill for ${product.productNo}`,
-    description: filled ? `From ${product.modelName}. Anything you'd already typed was kept.` : 'Every cell in this row already has a value.',
+    description: filled
+      ? `From ${source}. Anything you'd already typed was kept.${categoryNote}`
+      : `Every cell in this row already has a value.${categoryNote}`,
     color: filled ? 'info' : 'neutral',
     duration: 4000
   })
 }
+
+/**
+ * A product from the PIM also fills the model's category and sub-category, but
+ * only while the category is still empty. A category the PIM has and Cost
+ * Modelling doesn't is created here under the same name. Returns a sentence for the toast.
+ */
+async function fillCategoryFromPim(product: CostProductSuggestion): Promise<string> {
+  const name = product.pim?.categoryName
+  if (!name || categoryId.value) return ''
+  const catId = await ensureCostCategory(name)
+  if (!catId) return ''
+  categoryId.value = catId
+  const subName = product.pim?.subCategoryName
+  const subId = subName ? await ensureCostSubCategory(catId, subName) : undefined
+  if (subId && !subCategoryId.value) subCategoryId.value = subId
+  const cat = categories.value?.find(c => c.id === catId)
+  const sub = cat?.subCategories.find(s => s.id === subId)
+  return ` Category set to ${cat?.name ?? name}${sub ? ` › ${sub.name}` : ''}.`
+}
+
+/* What the PIM says about each row's product number (Step 20.3). A missing key
+   = not known yet; null = checked, nothing has exactly this number. */
+const pimStatus = reactive<Record<number, CostProductSuggestion | null>>({})
+
+function onPimMatch(key: number, match: CostProductSuggestion | null | undefined) {
+  if (match === undefined) Reflect.deleteProperty(pimStatus, key)
+  else pimStatus[key] = match
+}
+
+/** Rows that arrive with a product number (a duplicated model) are checked once. */
+async function checkRowsInPim() {
+  for (const row of rows.value) {
+    const text = row.productNo.trim()
+    if (!text) continue
+    try {
+      const list = await useApiFetch<CostProductSuggestion[]>('/api/tools/cost-modelling/products', { query: { q: text } })
+      onPimMatch(row.key, list.find(s => costProductNoKey(s.productNo) === costProductNoKey(text)) ?? null)
+    } catch {
+      // No note on this row; saving still works.
+    }
+  }
+}
+onMounted(checkRowsInPim)
 
 function removeRow(i: number) {
   if (rows.value.length === 1) rows.value = [emptyCostFormRow(nextKey++)]
@@ -113,38 +163,93 @@ const rateChanges = computed(() => {
 /* ------------------------------------------------------------------ */
 
 const originItems = computed(() => (factors.value?.origins ?? []).map(o => ({ label: o.name, value: o.id })))
-const categoryItems = computed(() => categories.value ?? [])
-const subCategoryItems = computed(() => categories.value?.find(c => c.id === categoryId.value)?.subCategories ?? [])
 const basisItems = [
   { label: `20' container`, value: 'c20' as const },
   { label: '40HC container', value: 'c40hc' as const }
 ]
 
-async function createCategory(name: string) {
+/* Categories (Step 20.4): the dropdowns list Cost Modelling's own categories plus
+   any the PIM has that Cost Modelling doesn't, marked "from PIM". Picking one of
+   those creates it here under the same name. */
+const { data: pimCategories } = await useAsyncData('cost-modelling-pim-categories', () =>
+  useApiFetch<PimCategoryName[]>('/api/tools/cost-modelling/pim-categories').catch(() => [] as PimCategoryName[])
+)
+const PIM_PREFIX = 'pim:'
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+
+interface MenuItem { id: number | string, name: string }
+const categoryItems = computed<MenuItem[]>(() => {
+  const own = categories.value ?? []
+  const fromPim = (pimCategories.value ?? [])
+    .filter(p => !own.some(c => sameName(c.name, p.name)))
+    .map(p => ({ id: `${PIM_PREFIX}${p.name}`, name: `${p.name} (from PIM)` }))
+  return [...own, ...fromPim]
+})
+const subCategoryItems = computed<MenuItem[]>(() => {
+  const cat = categories.value?.find(c => c.id === categoryId.value)
+  if (!cat) return []
+  const pim = pimCategories.value?.find(p => sameName(p.name, cat.name))
+  const fromPim = (pim?.subCategories ?? [])
+    .filter(name => !cat.subCategories.some(s => sameName(s.name, name)))
+    .map(name => ({ id: `${PIM_PREFIX}${name}`, name: `${name} (from PIM)` }))
+  return [...cat.subCategories, ...fromPim]
+})
+
+/** Finds or creates the Cost Modelling category with this name; returns its id (undefined if it failed). */
+async function ensureCostCategory(name: string): Promise<number | undefined> {
   const problem = costNameProblem(name, 'Category')
-  if (problem) return toast.add({ title: problem, color: 'error' })
+  if (problem) {
+    toast.add({ title: problem, color: 'error' })
+    return undefined
+  }
   try {
     const { category } = await useApiFetch<{ category: { id: number } }>('/api/tools/cost-modelling/categories', { method: 'POST', body: { name } })
     await refreshCategories()
-    categoryId.value = category.id
+    return category.id
   } catch (err) {
     toast.add({ title: 'Could not add the category', description: errorText(err), color: 'error' })
+    return undefined
   }
+}
+
+async function ensureCostSubCategory(parentId: number, name: string): Promise<number | undefined> {
+  const problem = costNameProblem(name, 'Sub-category')
+  if (problem) {
+    toast.add({ title: problem, color: 'error' })
+    return undefined
+  }
+  try {
+    const { subCategory } = await useApiFetch<{ subCategory: { id: number } }>(
+      `/api/tools/cost-modelling/categories/${parentId}/sub-categories`, { method: 'POST', body: { name } }
+    )
+    await refreshCategories()
+    return subCategory.id
+  } catch (err) {
+    toast.add({ title: 'Could not add the sub-category', description: errorText(err), color: 'error' })
+    return undefined
+  }
+}
+
+async function createCategory(name: string) {
+  const id = await ensureCostCategory(name)
+  if (id) categoryId.value = id
 }
 
 async function createSubCategory(name: string) {
   if (!categoryId.value) return
-  const problem = costNameProblem(name, 'Sub-category')
-  if (problem) return toast.add({ title: problem, color: 'error' })
-  try {
-    const { subCategory } = await useApiFetch<{ subCategory: { id: number } }>(
-      `/api/tools/cost-modelling/categories/${categoryId.value}/sub-categories`, { method: 'POST', body: { name } }
-    )
-    await refreshCategories()
-    subCategoryId.value = subCategory.id
-  } catch (err) {
-    toast.add({ title: 'Could not add the sub-category', description: errorText(err), color: 'error' })
-  }
+  const id = await ensureCostSubCategory(categoryId.value, name)
+  if (id) subCategoryId.value = id
+}
+
+/** A pick from either dropdown: a "from PIM" item is created here first. */
+async function pickCategory(value: number | string | undefined) {
+  if (typeof value === 'string' && value.startsWith(PIM_PREFIX)) await createCategory(value.slice(PIM_PREFIX.length))
+  else categoryId.value = value as number | undefined
+}
+
+async function pickSubCategory(value: number | string | undefined) {
+  if (typeof value === 'string' && value.startsWith(PIM_PREFIX)) await createSubCategory(value.slice(PIM_PREFIX.length))
+  else subCategoryId.value = value as number | undefined
 }
 
 /* ------------------------------------------------------------------ */
@@ -160,6 +265,15 @@ const parsed = computed(() => rows.value.map(parseCostFormRow))
 const results = computed<(CostRowResult | null)[]>(() => rows.value.map((r, i) =>
   snapshot.value && !costFormRowIsBlank(r) ? calculateCostRow(parsed.value[i]!.input, snapshot.value, containerBasis.value) : null
 ))
+
+/** Where a row disagrees with the PIM's copy ([] when it agrees or isn't in the PIM). */
+function pimDifferenceList(i: number): string[] {
+  const row = rows.value[i]
+  const pim = row ? pimStatus[row.key]?.pim : null
+  if (!row || !pim) return []
+  const input = parsed.value[i]!.input
+  return pimDifferences({ description: row.description, carton: input.carton, outer: input.outer, pallet: input.pallet }, pim)
+}
 
 const isBad = (i: number, field: string) => parsed.value[i]?.badFields.includes(field) ?? false
 
@@ -204,9 +318,25 @@ async function save() {
       duplicatedFromId: source.value?.id ?? null,
       rows: costFormRowsForSave(rows.value)
     }
-    const { id, name } = await useApiFetch<{ id: number, name: string }>('/api/tools/cost-modelling/models', { method: 'POST', body })
+    const { id, name, pim } = await useApiFetch<{ id: number, name: string, pim: CostPimSyncResult }>('/api/tools/cost-modelling/models', { method: 'POST', body })
     saved.value = true
     toast.add({ title: 'Cost model saved', description: name, color: 'success' })
+    if (pim.created.length) {
+      toast.add({
+        title: `Added ${pim.created.length} new product${pim.created.length === 1 ? '' : 's'} to the PIM`,
+        description: `${pim.created.join(', ')} - saved as Drafts. Complete them in Product Information.`,
+        color: 'info',
+        duration: 8000
+      })
+    }
+    if (pim.skipped.length) {
+      toast.add({
+        title: 'Some products could not be added to the PIM',
+        description: pim.skipped.map(s => (s.productNo ? `${s.productNo}: ${s.reason}` : s.reason)).join(' '),
+        color: 'warning',
+        duration: 12000
+      })
+    }
     await refreshNuxtData('cost-models-list')
     emit('saved', id)
   } catch (err) {
@@ -336,7 +466,7 @@ const inputUi = { base: 'px-1.5 text-right tabular-nums' }
           required
         >
           <UInputMenu
-            v-model="categoryId"
+            :model-value="categoryId"
             :items="categoryItems"
             value-key="id"
             label-key="name"
@@ -344,6 +474,7 @@ const inputUi = { base: 'px-1.5 text-right tabular-nums' }
             placeholder="Choose or type new"
             class="w-full"
             aria-label="Category"
+            @update:model-value="pickCategory"
             @create="createCategory"
           />
         </UFormField>
@@ -352,7 +483,7 @@ const inputUi = { base: 'px-1.5 text-right tabular-nums' }
           hint="Optional"
         >
           <UInputMenu
-            v-model="subCategoryId"
+            :model-value="subCategoryId"
             :items="subCategoryItems"
             value-key="id"
             label-key="name"
@@ -361,6 +492,7 @@ const inputUi = { base: 'px-1.5 text-right tabular-nums' }
             :placeholder="categoryId ? 'Choose or type new' : 'Choose a category first'"
             class="w-full"
             aria-label="Sub-category"
+            @update:model-value="pickSubCategory"
             @create="createSubCategory"
           />
         </UFormField>
@@ -553,7 +685,41 @@ const inputUi = { base: 'px-1.5 text-right tabular-nums' }
                     v-model="row.productNo"
                     :label="`Row ${i + 1} product no.`"
                     @pick="fillFromProduct(i, $event)"
+                    @match="onPimMatch(row.key, $event)"
                   />
+                  <UTooltip
+                    v-if="pimStatus[row.key]?.pim"
+                    :text="`In the PIM: ${pimStatus[row.key]!.pim!.name}`"
+                  >
+                    <UIcon
+                      name="i-lucide-package-check"
+                      class="size-4 shrink-0 text-success"
+                      :aria-label="`In the PIM: ${pimStatus[row.key]!.pim!.name}`"
+                      :data-testid="`in-pim-${i}`"
+                    />
+                  </UTooltip>
+                  <UTooltip
+                    v-else-if="row.productNo.trim() && pimStatus[row.key] !== undefined"
+                    text="Not in the PIM yet - it will be added there as a Draft when you save"
+                  >
+                    <UIcon
+                      name="i-lucide-package-plus"
+                      class="size-4 shrink-0 text-info"
+                      aria-label="Not in the PIM yet - it will be added there as a Draft when you save"
+                      :data-testid="`new-in-pim-${i}`"
+                    />
+                  </UTooltip>
+                  <UTooltip
+                    v-if="pimDifferenceList(i).length"
+                    :text="`Differs from PIM - ${pimDifferenceList(i).join(' · ')}`"
+                  >
+                    <UIcon
+                      name="i-lucide-git-compare"
+                      class="size-4 shrink-0 text-warning"
+                      :aria-label="`Differs from PIM. ${pimDifferenceList(i).join('. ')}`"
+                      :data-testid="`differs-pim-${i}`"
+                    />
+                  </UTooltip>
                   <UTooltip
                     v-if="results[i]?.issues.length"
                     :text="results[i]!.issues.join(' · ')"

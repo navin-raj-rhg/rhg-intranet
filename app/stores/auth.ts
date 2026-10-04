@@ -74,6 +74,22 @@ export const useAuthStore = defineStore('auth', () => {
     if (error) throw error
   }
 
+  /** Emails a "forgot password" link that lands on /reset-password. */
+  async function sendPasswordReset(email: string) {
+    const supabase = useSupabase()
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`
+    })
+    if (error) throw error
+  }
+
+  /** Sets a new password for the signed-in person. */
+  async function changePassword(password: string) {
+    const supabase = useSupabase()
+    const { error } = await supabase.auth.updateUser({ password })
+    if (error) throw error
+  }
+
   async function signOut() {
     const supabase = useSupabase()
     await supabase.auth.signOut()
@@ -88,6 +104,8 @@ export const useAuthStore = defineStore('auth', () => {
     fetchProfile,
     signIn,
     signUp,
+    sendPasswordReset,
+    changePassword,
     signOut
   }
 })

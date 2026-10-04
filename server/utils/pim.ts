@@ -552,10 +552,10 @@ async function updateProductRow(
   return true
 }
 
-export async function createPimProduct(db: Db, userId: string, body: PimProductBody) {
+export async function createPimProduct(db: Db, userId: string, body: PimProductBody, summary = 'Created') {
   const data = await cleanPimProduct(db, body)
   try {
-    return { id: await db.transaction(tx => insertProduct(tx, userId, data, 'Created')) }
+    return { id: await db.transaction(tx => insertProduct(tx, userId, data, summary)) }
   } catch (err) {
     if (isUniqueViolation(err)) throw new PimError(409, noProductNoMessage(data.productNo))
     throw err

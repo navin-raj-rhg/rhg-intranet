@@ -61,19 +61,17 @@ const approvalItems = computed(() => {
   return items
 })
 
-// Projects: tasks assigned to this person that are ready to work on.
-const projectsTool = (tools ?? []).find(t => t.id === 'projects')
-interface MyProjectTask { id: number, title: string, overdue: boolean }
-const { data: myTasks } = await useAsyncData('dashboard-my-project-tasks', () =>
-  projectsTool
-    ? useApiFetch<MyProjectTask[]>('/api/tools/projects/my-tasks').catch(() => [] as MyProjectTask[])
-    : Promise.resolve([] as MyProjectTask[])
-)
-const myTasksOverdue = computed(() => (myTasks.value ?? []).filter(t => t.overdue).length)
-const myTasksText = computed(() => {
-  const n = myTasks.value?.length ?? 0
-  const base = `${n} ${n === 1 ? 'task is' : 'tasks are'} assigned to you and ready to start.`
-  return myTasksOverdue.value ? `${base} ${myTasksOverdue.value} ${myTasksOverdue.value === 1 ? 'is' : 'are'} overdue.` : base
+// Favourite tools (stars on the launcher, shown in the Favourite tools tile).
+const favourites = useFavouriteTools()
+await useAsyncData('dashboard-favourites', async () => {
+  await favourites.load()
+  return true
+})
+
+// The top row spreads evenly over however many tiles this person can see.
+const topRowColumns = computed(() => {
+  const count = 1 + (canSeeProjects ? 1 : 0) + (canSeeLeave ? 1 : 0)
+  return ({ 1: 'lg:grid-cols-1', 2: 'lg:grid-cols-2', 3: 'lg:grid-cols-3' } as Record<number, string>)[count]
 })
 
 async function claimOwner() {
@@ -163,46 +161,40 @@ async function claimOwner() {
       </template>
     </UAlert>
 
-    <UAlert
-      v-if="projectsTool && myTasks?.length"
-      class="mt-6"
-      :color="myTasksOverdue ? 'error' : 'warning'"
-      variant="subtle"
-      icon="i-lucide-list-checks"
-      title="Tasks waiting for you"
-      :description="myTasksText"
-      data-testid="my-tasks-banner"
+    <!-- Top row: the personal tiles - Favourite tools, My tasks (needs Projects) and Away today
+         (needs Leave). They share the width evenly; on a phone they stack. -->
+    <div
+      class="mt-8 grid gap-4"
+      :class="topRowColumns"
     >
-      <template #actions>
-        <UButton
-          size="sm"
-          :to="`${projectsTool.route}?tab=mine`"
-        >
-          See my tasks
-        </UButton>
-      </template>
-    </UAlert>
-
-    <!-- Top row: Posts (2/3) beside Upcoming events over Away today (1/3). On desktop
-         the column is exactly as tall as Posts; on a phone everything stacks. -->
-    <div class="mt-8 grid gap-4 lg:grid-cols-3">
-      <div class="h-[32rem] lg:col-span-2 lg:h-[36rem]">
-        <DashboardPostsWidget />
+      <div class="h-64">
+        <DashboardFavouriteTools :tools="tools ?? []" />
       </div>
-      <div class="flex flex-col gap-4 lg:h-[36rem]">
-        <div class="min-h-0 lg:flex-[3]">
-          <DashboardUpcomingEvents />
-        </div>
-        <div
-          v-if="canSeeLeave"
-          class="min-h-0 lg:flex-[2]"
-        >
-          <DashboardAwayToday />
-        </div>
+      <div
+        v-if="canSeeProjects"
+        class="h-64"
+      >
+        <DashboardMyTasks />
+      </div>
+      <div
+        v-if="canSeeLeave"
+        class="h-64"
+      >
+        <DashboardAwayToday />
       </div>
     </div>
 
-    <!-- Second row: Sales, Project and Goals overviews (Step 19). Project overview needs Projects access. -->
+    <!-- Middle row: Posts (2/3) beside Upcoming events (1/3), the same height. -->
+    <div class="mt-4 grid gap-4 lg:grid-cols-3">
+      <div class="h-[32rem] lg:col-span-2 lg:h-[36rem]">
+        <DashboardPostsWidget />
+      </div>
+      <div class="h-80 lg:h-[36rem]">
+        <DashboardUpcomingEvents />
+      </div>
+    </div>
+
+    <!-- Bottom row: Sales, Project and Goals overviews (Step 19). Project overview needs Projects access. -->
     <div class="mt-4 grid items-start gap-4 lg:grid-cols-3">
       <DashboardSalesOverview />
       <DashboardProjectOverview v-if="canSeeProjects" />
@@ -216,34 +208,50 @@ async function claimOwner() {
       </h2>
 
       <UPageGrid v-if="tools && tools.length > 0">
-        <UButton
+        <div
           v-for="tool in tools"
           :key="tool.id"
-          :to="tool.route"
-          variant="outline"
-          color="neutral"
-          class="h-auto p-4 justify-start"
-          @click="openingToolId = tool.id"
+          class="relative"
         >
-          <div class="flex items-center gap-3">
-            <UIcon
-              :name="openingToolId === tool.id ? 'i-lucide-loader-circle' : (tool.icon || 'i-lucide-puzzle')"
-              class="size-6 shrink-0"
-              :class="{ 'animate-spin': openingToolId === tool.id }"
-            />
-            <div class="text-left">
-              <p class="font-medium">
-                {{ tool.name }}
-              </p>
-              <p
-                v-if="tool.description"
-                class="text-xs text-muted"
-              >
-                {{ tool.description }}
-              </p>
+          <UButton
+            :to="tool.route"
+            variant="outline"
+            color="neutral"
+            class="h-auto w-full p-4 pr-12 justify-start"
+            @click="openingToolId = tool.id"
+          >
+            <div class="flex items-center gap-3">
+              <UIcon
+                :name="openingToolId === tool.id ? 'i-lucide-loader-circle' : (tool.icon || 'i-lucide-puzzle')"
+                class="size-6 shrink-0"
+                :class="{ 'animate-spin': openingToolId === tool.id }"
+              />
+              <div class="text-left">
+                <p class="font-medium">
+                  {{ tool.name }}
+                </p>
+                <p
+                  v-if="tool.description"
+                  class="text-xs text-muted"
+                >
+                  {{ tool.description }}
+                </p>
+              </div>
             </div>
-          </div>
-        </UButton>
+          </UButton>
+          <UButton
+            class="absolute right-2 top-2"
+            variant="ghost"
+            color="neutral"
+            size="sm"
+            icon="i-lucide-star"
+            :class="favourites.isFavourite(tool.id) ? 'text-warning' : 'text-muted'"
+            :ui="{ leadingIcon: favourites.isFavourite(tool.id) ? 'fill-current' : '' }"
+            :aria-label="favourites.isFavourite(tool.id) ? `Remove ${tool.name} from favourites` : `Add ${tool.name} to favourites`"
+            :data-testid="`star-${tool.id}`"
+            @click="favourites.toggle(tool.id)"
+          />
+        </div>
       </UPageGrid>
 
       <UCard v-else>

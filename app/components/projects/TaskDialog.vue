@@ -67,7 +67,8 @@ async function save() {
     const body = {
       title: form.title,
       description: form.description.trim() || null,
-      sectionId: form.sectionId,
+      // The form uses 0 for "No section"; the server wants null (and undefined = keep).
+      sectionId: form.sectionId === 0 ? null : form.sectionId,
       assigneeId: form.assignee === NO_ONE ? null : form.assignee,
       leadTimeDays: form.leadTimeDays,
       dependsOn: form.dependsOn

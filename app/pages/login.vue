@@ -13,6 +13,29 @@ const form = reactive({
   password: ''
 })
 
+const resetting = ref(false)
+
+async function forgotPassword() {
+  if (!form.email.trim()) {
+    toast.add({ title: 'Enter your email first', description: 'Type your email address above, then click "Forgot password?".', color: 'warning' })
+    return
+  }
+  resetting.value = true
+  try {
+    await authStore.sendPasswordReset(form.email.trim())
+    // Same message whether or not the address has an account.
+    toast.add({
+      title: 'Check your email',
+      description: 'If that address has an account, we sent a link to choose a new password.',
+      color: 'success'
+    })
+  } catch (err) {
+    toast.add({ title: 'Could not send the email', description: errorText(err), color: 'error' })
+  } finally {
+    resetting.value = false
+  }
+}
+
 async function submit() {
   loading.value = true
   try {
@@ -112,14 +135,26 @@ async function submit() {
       </form>
 
       <template #footer>
-        <UButton
-          variant="link"
-          size="sm"
-          class="p-0"
-          @click="mode = mode === 'signin' ? 'signup' : 'signin'"
-        >
-          {{ mode === 'signin' ? "Don't have an account? Sign up" : 'Already have an account? Sign in' }}
-        </UButton>
+        <div class="flex flex-col items-start gap-1">
+          <UButton
+            variant="link"
+            size="sm"
+            class="p-0"
+            @click="mode = mode === 'signin' ? 'signup' : 'signin'"
+          >
+            {{ mode === 'signin' ? "Don't have an account? Sign up" : 'Already have an account? Sign in' }}
+          </UButton>
+          <UButton
+            v-if="mode === 'signin'"
+            variant="link"
+            size="sm"
+            class="p-0"
+            :loading="resetting"
+            @click="forgotPassword"
+          >
+            Forgot password?
+          </UButton>
+        </div>
       </template>
     </UCard>
   </div>

@@ -12,7 +12,7 @@ import {
   index
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
-import { profiles } from './core'
+import { profiles, toolRegistry } from './core'
 
 /**
  * Dashboard (Step 18). Not a tool: no tool_registry row and no roles. Anyone
@@ -167,3 +167,18 @@ export const dashboardUploads = pgTable('dashboard_uploads', {
   uploadedBy: uuid('uploaded_by').references(() => profiles.id, { onDelete: 'set null' }),
   uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow()
 })
+
+/** Tools a person has starred; shown in the dashboard's Favourite tools widget (Step 20.2). */
+export const userFavouriteTools = pgTable(
+  'user_favourite_tools',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    toolId: text('tool_id')
+      .notNull()
+      .references(() => toolRegistry.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+  },
+  table => [primaryKey({ columns: [table.userId, table.toolId] })]
+)

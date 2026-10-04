@@ -5,7 +5,7 @@ export default defineNuxtRouteMiddleware((to) => {
   if (import.meta.server) return
 
   const authStore = useAuthStore()
-  const publicPages = ['/login']
+  const publicPages = ['/login', '/reset-password']
 
   if (!authStore.user && !publicPages.includes(to.path)) {
     return navigateTo('/login')

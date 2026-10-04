@@ -9,7 +9,13 @@ import type { CostProductSuggestion } from '~~/shared/types/costModelling'
  */
 const model = defineModel<string>({ required: true })
 const props = defineProps<{ label: string }>()
-const emit = defineEmits<{ pick: [product: CostProductSuggestion] }>()
+// `match` tells the form what the PIM / earlier costs know about the typed number:
+// undefined = not known yet (typing, or the look-up failed), null = checked and
+// nothing has exactly this number, otherwise the product that does.
+const emit = defineEmits<{
+  pick: [product: CostProductSuggestion]
+  match: [product: CostProductSuggestion | null | undefined]
+}>()
 
 const open = ref(false)
 const focused = ref(false)
@@ -28,10 +34,14 @@ async function lookUp(text: string) {
     const list = await useApiFetch<CostProductSuggestion[]>('/api/tools/cost-modelling/products', { query: { q: text } })
     if (mine !== requestNo) return // a newer search has started
     suggestions.value = list
+    emit('match', list.find(s => costProductNoKey(s.productNo) === costProductNoKey(text)) ?? null)
     active.value = 0
     open.value = focused.value && list.length > 0
   } catch {
-    if (mine === requestNo) open.value = false
+    if (mine === requestNo) {
+      open.value = false
+      emit('match', undefined)
+    }
   } finally {
     if (mine === requestNo) loading.value = false
   }
@@ -39,6 +49,7 @@ async function lookUp(text: string) {
 
 function onInput() {
   clearTimeout(timer)
+  emit('match', undefined)
   const text = model.value.trim()
   if (!text) {
     requestNo++
@@ -120,7 +131,7 @@ const savedOn = (iso: string) => formatDateMY(todayMY(new Date(iso)))
         :aria-label="`Previously costed products for ${props.label}`"
       >
         <li class="px-3 pt-1 pb-1.5 text-xs text-muted">
-          Previously costed - pick one to fill this row's empty cells
+          From the PIM and earlier cost models - pick one to fill this row's empty cells
         </li>
         <li
           v-for="(s, i) in suggestions"
@@ -140,7 +151,16 @@ const savedOn = (iso: string) => formatDateMY(todayMY(new Date(iso)))
             > · {{ s.description }}</span>
           </p>
           <p class="text-xs text-dimmed">
-            {{ s.supplierName }} · last costed {{ savedOn(s.savedAt) }}
+            <span
+              v-if="s.pim"
+              class="font-medium text-success"
+            >In PIM</span>
+            <template v-if="s.pim && s.savedAt">
+              ·
+            </template>
+            <template v-if="s.savedAt">
+              {{ s.supplierName }} · last costed {{ savedOn(s.savedAt) }}
+            </template>
           </p>
         </li>
       </ul>
