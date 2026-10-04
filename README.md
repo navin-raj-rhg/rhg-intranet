@@ -1514,3 +1514,79 @@ routes in the signed-in browser pane against the real Supabase, did real uploads
 looked at all three tiles with a temporary project (since deleted) in light and dark mode and at phone width
 (no sideways scrolling). **Not verified by Claude:** the dashboard and Manage chart data as a non-owner, and
 without Projects or Leave access (Navin's multi-account test is the end-to-end check).
+
+## Step 20: Clean-up (passwords, dashboard layout, Cost Modelling and PIM link)
+
+No new tool. Navin used the app as if it were live and sent points to fix; this Step collects them. Built in
+sub-steps 20.1 to 20.4 with Claude Code, from Navin's feedback in one long session.
+
+### What people see
+
+- **Change password:** in the profile menu (top right). New password twice, at least 8 characters, no need to
+  type the old one. **Forgot password?** on the login page emails a link to `/reset-password`, where the person
+  chooses a new password and is signed in.
+- **Dashboard layout:** top row Favourite tools, My tasks and Away today (equal width; My tasks only with a
+  Projects role, Away today only with Leave access, the rest spread evenly); middle row Posts (2/3) beside
+  Upcoming events (1/3); bottom row Sales, Project and Goals overviews. The "Tasks waiting for you" banner was
+  removed (My tasks replaces it).
+- **Favourite tools:** a star on every tool in the Tools list; starred tools appear as buttons in the Favourite
+  tools tile, in the order starred. Tools the person can no longer open are hidden.
+- **My tasks:** tasks assigned to the person in Projects that are ready to start (not blocked, not done),
+  earliest due date first, with project name, due date and an "N overdue" badge.
+- **Projects fix:** saving a task with "No section" failed ("Too small: expected number to be >0"); fixed.
+- **Cost Modelling and PIM link:**
+  - Typing a product number looks in the **PIM** as well as earlier cost models. PIM's description and sizes
+    win; prices come only from the last cost. Suggestions say "In PIM".
+  - Each product row shows **In the PIM**, **Not in the PIM yet** (will be added on save) or **Differs from PIM**
+    (a size or description disagrees; the PIM is never changed from Cost Modelling).
+  - Saving a model creates a **Draft product in the PIM** for every product number the PIM doesn't have (supplier
+    as primary supplier, category and sub-category found or created by name, packaging if typed; no prices).
+    The PIM history reads "Created from cost model ... by <person>". A repeated number creates one product. If
+    one can't be added, the model still saves and a warning says why. No PIM role is needed.
+  - The **Category / Sub-category dropdowns** also list PIM categories marked "(from PIM)"; picking one creates
+    the Cost Modelling category with the same name. Picking a PIM product fills an empty category the same way.
+
+### How it fits together
+
+- **Schema:** `user_favourite_tools` (`user_id`, `tool_id`, primary key on both) in
+  `server/db/schema/dashboard.ts`. Migration `0017_dry_crusher_hogan.sql`. No manual SQL.
+- **Pure logic:** `shared/utils/passwordRules.ts` (3 tests), `shared/utils/costPimLink.ts` (matching, fill,
+  differences and the PIM draft; 9 tests in `tests/costPimLink.test.ts`). `shared/utils/pageGuard.ts` now also
+  treats `/reset-password` as a public page (one check added to an existing test).
+- **Auth:** `sendPasswordReset` and `changePassword` in `app/stores/auth.ts`; dialog in `app/layouts/default.vue`;
+  `app/pages/reset-password.vue` (shows the reason Supabase gives when a link can't be used).
+- **Dashboard:** `server/api/dashboard/favourites/` (`index.get`, `[toolId].put`, `[toolId].delete`),
+  `app/composables/useFavouriteTools.ts`, `app/components/dashboard/FavouriteTools.vue` and `MyTasks.vue`
+  (My tasks reuses `/api/tools/projects/my-tasks`), layout in `app/pages/index.vue`.
+- **Cost Modelling and PIM:** `server/utils/costPimSync.ts` (find PIM products for the look-up; create the missing
+  ones on save), `findCostProducts` in `server/utils/costModels.ts` (merges both sources),
+  `server/api/tools/cost-modelling/pim-categories.get.ts`, `models/index.post.ts` (returns what was added to the
+  PIM). `createPimProduct` in `server/utils/pim.ts` takes an optional history summary. Screens:
+  `app/components/cost-modelling/ModelForm.vue` and `ProductNoInput.vue`.
+
+### One-time setup after applying this step
+
+1. `pnpm db:migrate` (migration 0017, only adds a table). **Run it before pushing the code.** (Already applied.)
+2. In Supabase, Authentication, URL Configuration, Redirect URLs, add
+   `https://rhg-intranet-production.up.railway.app/reset-password` and `http://localhost:3000/reset-password`
+   (done by Navin).
+3. Restart `pnpm dev` after pulling (new files).
+
+### Known limitations (fine for the demo)
+
+- **Reset emails** come from Supabase's built-in sender: slow and limited to a few an hour ("email rate limit
+  exceeded"). Custom mail is Phase 5. The reset link only works in the browser that asked for it and only once
+  (mail scanners can use it up).
+- Cost Modelling and the PIM **keep separate category lists**; a PIM rename isn't followed. One shared list is a
+  post-approval idea.
+- A PIM product created from a cost model with no description is named after its product number; rename it in the PIM.
+- Existing saved cost models were not pushed into the PIM (deliberately; a bulk write).
+- Changing the password doesn't ask for the current one, by choice.
+- The test tool's multi-character typing skipped the product look-up while real key presses worked (a tool quirk,
+  not seen by real use).
+
+**Verified:** `pnpm lint`, `pnpm typecheck` and `pnpm test` (212 tests) pass. Claude drove the dashboard (stars,
+persistence, phone width, dark mode) and the cost model form (look-up, pick, differs, save, category dropdowns) in
+the signed-in browser pane against the real database with temporary data that was then deleted. Navin tested the
+password reset, My tasks and the Cost Modelling and PIM link on the live app. **Not verified:** the dashboard as a
+non-owner or without Projects or Leave access; saving a model as a user with no PIM role.

@@ -1,4 +1,4 @@
-# RHG Intranet — Project Status (updated through Step 19)
+# RHG Intranet — Project Status (updated through Step 20)
 
 > **Where this lives:** `docs/project-status.md` in the repo is the source of
 > truth (Claude Code reads it via `CLAUDE.md`). Navin may also keep a copy in
@@ -13,9 +13,9 @@ case proposal to directors before company-wide rollout approval, deployed as a
 live URL.
 
 **Numbering convention (use this when talking to Claude):** everything is a
-numbered **Step** (Step 1 ... Step 19 done, Step 20 next), with sub-steps like 10.4. The
+numbered **Step** (Step 1 ... Step 20 done, Step 21 next), with sub-steps like 10.4. The
 **Phases** group the steps. Refer to work by step number, e.g. "let's do
-Step 15" or "back to 11.8b". Steps 1-19 are done; Step 20 and later are the agreed
+Step 15" or "back to 11.8b". Steps 1-20 are done; Step 21 and later are the agreed
 roadmap and have not been started.
 
 ## Live demo
@@ -123,7 +123,7 @@ The short version of these rules is in `CLAUDE.md` at the repo root.
 - **File storage:** Cloudflare R2 (S3-compatible), accessed via presigned URLs
 - **PDF generation:** `pdfkit` (expense-claims payroll report; inspection reports)
 - **Tests:** `pnpm test` runs Node's built-in test runner over `tests/*.test.ts`
-  (pure logic only, no database) - **200 tests as of Step 19**.
+  (pure logic only, no database) - **212 tests as of Step 20**.
 - **Package manager:** pnpm
 - **Hosting:** Railway (Node server), auto-deploying from `main`
 
@@ -244,6 +244,7 @@ pattern spreads.
 | 17. Product Information (PIM) | ✅ Done (17.1-17.11) | Product catalogue replacing Plytix: products with several suppliers, packaging, attributes per category, images and documents, completeness score, change history, CSV import and export (see below) |
 | 18. Dashboard | ✅ Done (18.1-18.9) | Posts (post, comment, react, pin), Upcoming events (with public holidays) and the final dashboard layout with three placeholders (see below) |
 | 19. Dashboard charts | ✅ Done (19.1-19.10) | Sales overview and Goals overview charts from owner-uploaded CSV files; Project overview live from Projects (see below) |
+| 20. Clean-up | ✅ Done (20.1-20.4) | Change / forgot password, dashboard redesign (Favourite tools, My tasks), Projects "No section" fix, Cost Modelling linked to PIM (see below) |
 
 ### Step 11: Cost Modelling (complete)
 
@@ -783,6 +784,52 @@ Migration `0016_minor_agent_zero.sql`. No manual SQL.
 
 **Test data:** the sample sales and goals data above is the only thing left.
 
+### Step 20: Clean-up (complete)
+
+Sub-steps: 20.1 change and forgot password, 20.2 dashboard redesign (migration 0017), 20.3 Cost Modelling and
+PIM link (20.3a rules + tests, 20.3b server, 20.3c form), 20.4 PIM categories in the Cost Model dropdowns. Also
+the Projects "No section" fix. Committed and pushed by Claude at Navin's request (`416beea`). The repo `README.md`
+has the technical write-up. **Navin used the app as if live and sent points one at a time; he may reopen this
+Step in a new chat if more clean-up points come.**
+
+**Decisions (Navin's):**
+- **Passwords:** no need to type the current password when changing it; a **Forgot password?** link on the login
+  page (minimum 8 characters).
+- **Dashboard:** star tools to favourite them; **Favourite tools** and **My tasks** tiles. Layout (recommended by
+  Claude, Navin agreed): top row Favourite tools, My tasks, Away today; middle Posts 2/3 with Upcoming events 1/3;
+  bottom the three charts. Empty Favourite tools shows a hint. The "Tasks waiting for you" banner was removed.
+- **Cost Modelling <-> PIM (all as recommended):** a typed product number is looked up in the PIM; its blank
+  fields fill the row; on a difference the PIM is **never overwritten**, only flagged "Differs from PIM"; missing
+  products are created in the PIM as **Drafts when the model is saved** (not while typing); categories stay as two
+  separate lists matched **by name**; no PIM role needed; supplier, packaging, category and description are copied
+  but **not the FOB price or RRP**; **no script** to push old saved models into the PIM.
+- **Categories (Navin, after testing):** the Cost Model dropdowns also list PIM categories "(from PIM)"; picking
+  one creates the Cost Modelling category (recommended approach; a single shared list was left for after approval).
+- Claude merged the look-up sources instead of replacing the old one (so earlier prices still prefill); PIM wins for
+  description and sizes.
+
+**Tables:** `user_favourite_tools` (migration `0017_dry_crusher_hogan.sql`). No manual SQL.
+
+**Patterns worth reusing:**
+- **A second system's list shown beside your own** with a marker and created on pick (`(from PIM)`), instead of
+  merging the two lists.
+- **Best-effort side effects after a save:** the cost model saves first; adding to the PIM happens afterwards,
+  never fails the save, and reports `created` / `skipped`.
+- **The dev server must be restarted after new server files** (hit again: new `costPimSync.ts` caused 500s until
+  restart).
+
+**Known limitations (acceptable for the demo):**
+- Reset emails use Supabase's built-in sender (slow, a few an hour; "email rate limit exceeded"); the link works
+  once and only in the browser that asked for it. Custom mail is Phase 5.
+- Two separate category lists (Cost Modelling and PIM); a PIM rename isn't followed.
+- A PIM product created from a cost model with no description is named after its product number.
+- Old saved cost models were not pushed into the PIM.
+- **Not verified by Claude:** the dashboard as a non-owner or without Projects or Leave access; saving a cost model
+  as a user with no PIM role. Navin tested the password reset, My tasks and the Cost Modelling and PIM link on the live app.
+
+**Test data:** none left by Claude. The PIM holds Navin's own category "Temporary Fencing - Steel" (sub-category
+"Temporary Fencing"); the earlier sample sales and goals data (Step 19) is still in the database.
+
 ## Step 9 reference (still true)
 
 - Expense-claims specifics: categories are a fixed 7-value enum shared via
@@ -841,7 +888,7 @@ README's Step 10 section.
 - No Microsoft SSO yet - planned before company-wide launch.
 - `NUXT_SUPABASE_DB_URL` (direct connection) is intentionally not set on
   Railway - migrations must be run manually from a local machine after any
-  schema change; a push alone does not apply them (latest: `0016`; Steps 14 and 15 added none, Step 16 added `0012` and `0013`, Step 17 added `0014`, Step 18 added `0015`, Step 19 added `0016`). **Order for a
+  schema change; a push alone does not apply them (latest: `0017`; Steps 14 and 15 added none, Step 16 added `0012` and `0013`, Step 17 added `0014`, Step 18 added `0015`, Step 19 added `0016`, Step 20 added `0017`). **Order for a
   release with a migration that ADDS something: run `pnpm db:migrate` first, then push**
   (the code needs the new tables or columns). **When a migration DROPS something, push
   first, wait for the deploy, then migrate** (as with `0011`). Manual SQL in `server/db/manual-sql/` (001 new-user trigger, 002
@@ -948,6 +995,9 @@ chosen):**
 - Dashboard charts (from Step 19): keep upload history or add-to uploads; choose the goal period; filters by year,
   customer or state; an automatic feed instead of CSV; include closed projects in Project overview; an uploader
   role other than owner.
+- Step 20: a **single shared category list** for Cost Modelling and the PIM (after approval); a "Forgot password"
+  that doesn't depend on Supabase's built-in email (Phase 5); ask for the current password when changing it, if
+  wanted; optionally push existing saved cost models into the PIM (a bulk write, not done).
 - Dashboard (from Step 18): replies to comments, @mentions and in-app notifications for posts; changing a post's
   images after posting; an "events editor" role instead of owner-only; recurring events.
 
@@ -966,7 +1016,7 @@ chosen):**
   to matter, but recommended.
 - **Step 15 - Sign-up restriction to company email addresses.** ✅ done (see above).
 
-### Phase 4 - Build the business case (Steps 16-19 done; Step 20 next)
+### Phase 4 - Build the business case (Steps 16-20 done; Step 21 next)
 
 **Why the order changed (Navin, after Step 15):** the demo exists to win approval from the
 directors. Microsoft 365 SSO needs RHG's tenant details from the wider team, who would then ask
@@ -1000,9 +1050,11 @@ complete app.** Container planning and an HR module are therefore moved to after
     real in Step 19).
 - **Step 19 - Dashboard charts** ✅ done (see above). Sales overview and Goals overview from uploaded CSV files,
   Project overview live from Projects.
-- **Step 20 (next) - Clean-up.** Clear the backlogs (this document's Backlog) and make the modifications needed
-  throughout the app; fill in the data the demo needs.
-- **Step 21 - Cost comparison pitch.** Apps replaced, yearly SaaS cost vs the running cost of the
+- **Step 20 - Clean-up** ✅ done (see above). Done from Navin's own use of the app: passwords, dashboard layout,
+  Cost Modelling <-> PIM. The Backlog items not picked up stay in the Backlog. Entering the real data (PIM
+  categories and products, project task list, inspection templates, real sales and goals CSVs) is Navin's own
+  work before the demo.
+- **Step 21 (next) - Cost comparison pitch.** Apps replaced, yearly SaaS cost vs the running cost of the
   intranet - and it also **pitches what the app does and how much more convenient it is.** Needs real
   numbers from Navin; do not invent any.
 
