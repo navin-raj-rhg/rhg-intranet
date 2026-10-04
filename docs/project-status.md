@@ -1,4 +1,4 @@
-# RHG Intranet — Project Status (updated through Step 18)
+# RHG Intranet — Project Status (updated through Step 19)
 
 > **Where this lives:** `docs/project-status.md` in the repo is the source of
 > truth (Claude Code reads it via `CLAUDE.md`). Navin may also keep a copy in
@@ -13,9 +13,9 @@ case proposal to directors before company-wide rollout approval, deployed as a
 live URL.
 
 **Numbering convention (use this when talking to Claude):** everything is a
-numbered **Step** (Step 1 ... Step 18 done, Step 19 next), with sub-steps like 10.4. The
+numbered **Step** (Step 1 ... Step 19 done, Step 20 next), with sub-steps like 10.4. The
 **Phases** group the steps. Refer to work by step number, e.g. "let's do
-Step 15" or "back to 11.8b". Steps 1-18 are done; Step 19 and later are the agreed
+Step 15" or "back to 11.8b". Steps 1-19 are done; Step 20 and later are the agreed
 roadmap and have not been started.
 
 ## Live demo
@@ -123,7 +123,7 @@ The short version of these rules is in `CLAUDE.md` at the repo root.
 - **File storage:** Cloudflare R2 (S3-compatible), accessed via presigned URLs
 - **PDF generation:** `pdfkit` (expense-claims payroll report; inspection reports)
 - **Tests:** `pnpm test` runs Node's built-in test runner over `tests/*.test.ts`
-  (pure logic only, no database) - **190 tests as of Step 18**.
+  (pure logic only, no database) - **200 tests as of Step 19**.
 - **Package manager:** pnpm
 - **Hosting:** Railway (Node server), auto-deploying from `main`
 
@@ -243,6 +243,7 @@ pattern spreads.
 | 16. Projects | ✅ Done (16.1-16.11) | Project management for product launches: project types, master task list with sections, dependencies with automatic due dates, list and board, comments and files, dashboard banner (see below) |
 | 17. Product Information (PIM) | ✅ Done (17.1-17.11) | Product catalogue replacing Plytix: products with several suppliers, packaging, attributes per category, images and documents, completeness score, change history, CSV import and export (see below) |
 | 18. Dashboard | ✅ Done (18.1-18.9) | Posts (post, comment, react, pin), Upcoming events (with public holidays) and the final dashboard layout with three placeholders (see below) |
+| 19. Dashboard charts | ✅ Done (19.1-19.10) | Sales overview and Goals overview charts from owner-uploaded CSV files; Project overview live from Projects (see below) |
 
 ### Step 11: Cost Modelling (complete)
 
@@ -738,6 +739,50 @@ committed by Claude; Navin commits and pushes when he asks. The repo `README.md`
 **Test data:** none left by Claude. The real holiday "For Fun Day" and Navin's own event "Team outing" were added
 by Navin.
 
+### Step 19: Dashboard charts (complete)
+
+Sub-steps: 19.1 decisions, 19.2 rules + tests, 19.3 database (migration 0016), 19.4 API, 19.5 Manage chart data
+screen, 19.6 Sales overview, 19.7 Goals overview, 19.8 Project overview, 19.9 full check, 19.10 docs. Not
+committed by Claude; Navin commits and pushes when he asks. The repo `README.md` has the technical write-up.
+
+**What it is:** the three dashboard placeholders became real. **Not a tool**: no `tool_registry` row, no roles.
+
+**Decisions (Navin's, all as recommended):**
+- **Upload format CSV** with fixed column names and a downloadable template. Sales: `Date, Amount` (required),
+  `Customer, Category, State, Quantity`. Goals: `Goal, Month, Target, Actual` (required), `Unit`.
+- **Sales overview:** year so far against the same stretch of last year, monthly columns (this year vs last) and
+  top 5 customers / categories. **Goals overview:** progress bar per goal (latest month) plus a month-by-month trend.
+- **An upload replaces all the data** for that chart; the screen shows when, by whom and which file.
+- **Owner uploads; everyone who can sign in sees** Sales and Goals.
+- **Project overview** is live from Projects: open projects, at risk, overdue tasks, tasks by status and the most
+  at-risk projects. Admins and the owner see all open projects, others only theirs; shown only to people with a
+  Projects role.
+- **Charts** use Chart.js through `vue-chartjs`, coloured from the app's CSS variables (light and dark).
+
+**Tables:** `dashboard_sales_rows`, `dashboard_goal_rows` (unique per goal and month), `dashboard_uploads`.
+Migration `0016_minor_agent_zero.sql`. No manual SQL.
+
+**Patterns worth reusing:**
+- Check first, then apply, for uploads (the same `apply: false` approach as the PIM import); the check runs the
+  moment a file is chosen.
+- Dashboard figures are computed by pure functions in `shared/utils/dashboardData.ts` and unit tested.
+- A tile that depends on a tool is hidden by the page when the person has no access to that tool (as Away today).
+- Name composables / helpers so they don't clash with existing auto-imports: `formatAud` already existed in Cost
+  Modelling, so the chart ones are `formatChartMoney` / `formatChartShort`.
+
+**Known limitations (acceptable for the demo):**
+- Replace-only uploads, no history; no period or customer filters; amounts treated as AUD.
+- Project overview ignores closed projects.
+- **The database holds made-up sample sales and goals data** (176 and 36 rows, fake customers) from testing.
+  Replace it with real files on `/admin/dashboard-data` before showing the dashboard to anyone.
+- Claude checked the routes, real uploads and all three tiles in the browser pane (desktop, phone width, light and
+  dark) using a temporary project that was then deleted. **Not verified by Claude:** the dashboard and Manage chart
+  data as a non-owner, and the dashboard without Projects or Leave access.
+- A one-off "Cannot read properties of null (reading 'flags')" console error appeared once after the dev server
+  restarted and never again; watch for it.
+
+**Test data:** the sample sales and goals data above is the only thing left.
+
 ## Step 9 reference (still true)
 
 - Expense-claims specifics: categories are a fixed 7-value enum shared via
@@ -796,7 +841,7 @@ README's Step 10 section.
 - No Microsoft SSO yet - planned before company-wide launch.
 - `NUXT_SUPABASE_DB_URL` (direct connection) is intentionally not set on
   Railway - migrations must be run manually from a local machine after any
-  schema change; a push alone does not apply them (latest: `0015`; Steps 14 and 15 added none, Step 16 added `0012` and `0013`, Step 17 added `0014`, Step 18 added `0015`). **Order for a
+  schema change; a push alone does not apply them (latest: `0016`; Steps 14 and 15 added none, Step 16 added `0012` and `0013`, Step 17 added `0014`, Step 18 added `0015`, Step 19 added `0016`). **Order for a
   release with a migration that ADDS something: run `pnpm db:migrate` first, then push**
   (the code needs the new tables or columns). **When a migration DROPS something, push
   first, wait for the deploy, then migrate** (as with `0011`). Manual SQL in `server/db/manual-sql/` (001 new-user trigger, 002
@@ -900,6 +945,9 @@ chosen):**
   their own product text today); a "someone else changed this" warning for two editors; import of packaging,
   attributes and images; bulk edit; a completeness report across all products; confirm RRP currency / GST
   wording; the retailer-feed idea was dropped by Navin.
+- Dashboard charts (from Step 19): keep upload history or add-to uploads; choose the goal period; filters by year,
+  customer or state; an automatic feed instead of CSV; include closed projects in Project overview; an uploader
+  role other than owner.
 - Dashboard (from Step 18): replies to comments, @mentions and in-app notifications for posts; changing a post's
   images after posting; an "events editor" role instead of owner-only; recurring events.
 
@@ -918,7 +966,7 @@ chosen):**
   to matter, but recommended.
 - **Step 15 - Sign-up restriction to company email addresses.** ✅ done (see above).
 
-### Phase 4 - Build the business case (Steps 16-18 done; Step 19 next)
+### Phase 4 - Build the business case (Steps 16-19 done; Step 20 next)
 
 **Why the order changed (Navin, after Step 15):** the demo exists to win approval from the
 directors. Microsoft 365 SSO needs RHG's tenant details from the wider team, who would then ask
@@ -950,10 +998,9 @@ complete app.** Container planning and an HR module are therefore moved to after
     Step 10) below it. **Stacked together they must be the same height as the Posts widget.**
   - Below, **three 1/3-width placeholders:** **Sales overview, Project overview, Goals overview** (made
     real in Step 19).
-- **Step 19 (next) - Dashboard charts.** Data is **uploaded** and shown as charts. **Sales overview:** charts from
-  uploaded sales data. **Project overview:** data about the projects (from the Projects tool).
-  **Goals overview:** charts from uploaded goals data.
-- **Step 20 - Clean-up.** Clear the backlogs (this document's Backlog) and make the modifications needed
+- **Step 19 - Dashboard charts** ✅ done (see above). Sales overview and Goals overview from uploaded CSV files,
+  Project overview live from Projects.
+- **Step 20 (next) - Clean-up.** Clear the backlogs (this document's Backlog) and make the modifications needed
   throughout the app; fill in the data the demo needs.
 - **Step 21 - Cost comparison pitch.** Apps replaced, yearly SaaS cost vs the running cost of the
   intranet - and it also **pitches what the app does and how much more convenient it is.** Needs real

@@ -3,6 +3,7 @@ import {
   uuid,
   text,
   integer,
+  numeric,
   bigint,
   date,
   timestamp,
@@ -122,3 +123,47 @@ export const dashboardEvents = pgTable(
   },
   table => [index('dashboard_events_date_idx').on(table.date)]
 )
+
+/**
+ * Dashboard charts (Step 19). The owner uploads a CSV for Sales overview and
+ * another for Goals overview; each upload replaces everything for that chart
+ * (rules: shared/utils/dashboardData.ts).
+ */
+
+/** One row per uploaded sales line. */
+export const dashboardSalesRows = pgTable(
+  'dashboard_sales_rows',
+  {
+    id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+    date: date('date').notNull(),
+    customer: text('customer'),
+    category: text('category'),
+    state: text('state'),
+    amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+    quantity: numeric('quantity', { precision: 14, scale: 2 })
+  },
+  table => [index('dashboard_sales_rows_date_idx').on(table.date)]
+)
+
+/** One row per goal per month. Period is 'YYYY-MM'. */
+export const dashboardGoalRows = pgTable(
+  'dashboard_goal_rows',
+  {
+    id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+    goal: text('goal').notNull(),
+    period: text('period').notNull(),
+    target: numeric('target', { precision: 16, scale: 2 }).notNull(),
+    actual: numeric('actual', { precision: 16, scale: 2 }).notNull(),
+    unit: text('unit')
+  },
+  table => [uniqueIndex('dashboard_goal_rows_goal_period').on(sql`lower(${table.goal})`, table.period)]
+)
+
+/** When each chart's data was last replaced, and by whom. `kind` is 'sales' or 'goals'. */
+export const dashboardUploads = pgTable('dashboard_uploads', {
+  kind: text('kind').primaryKey(),
+  fileName: text('file_name').notNull(),
+  rowCount: integer('row_count').notNull(),
+  uploadedBy: uuid('uploaded_by').references(() => profiles.id, { onDelete: 'set null' }),
+  uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow()
+})

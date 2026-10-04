@@ -1446,3 +1446,71 @@ on delete, event permissions, signed-out refusal) and drove the screens in the b
 including the desktop column-height match and phone stacking with no sideways scrolling. All temporary data
 was removed. **Not verified by Claude:** the dashboard as a non-owner in a real browser, the dashboard for
 someone without Leave access, and a phone camera photo (Navin's multi-account test is the end-to-end check).
+
+## Step 19: Dashboard charts (Sales, Project and Goals overview)
+
+The three placeholders in the dashboard's second row became real. Not a tool: no tool row and no role.
+**Sales overview** and **Goals overview** draw charts from CSV files the **owner uploads**; **Project
+overview** is live from the Projects tool and needs no upload. Built in sub-steps 19.1 to 19.10 with Claude
+Code.
+
+### What people see
+
+- **Sales overview:** sales so far this year with the change against the same stretch of last year, a
+  monthly column chart (this year against last year) and the top 5 customers or categories (toggle).
+- **Goals overview:** a progress bar per goal (actual against target for its latest month that has started)
+  and a month-by-month trend for the goal you click. Months that haven't started never show an actual.
+- **Project overview:** open projects, at-risk projects, overdue tasks, a Done / In progress / To do bar and
+  the most at-risk projects (linked). Admins and the owner see every open project; others only theirs. The
+  tile is shown only to people with a Projects role.
+- Everyone who can sign in sees the Sales and Goals charts. Until data is uploaded the tile says so (the owner
+  gets an "Upload ... data" button).
+- **Manage chart data** (`/admin/dashboard-data`, owner only; button in the dashboard's Owner section): one
+  panel each for Sales and Goals with a template download, a file picker that **checks the file straight
+  away** (problems listed by row, 20 at most), an "Upload and replace" button and who / when / which file last
+  uploaded.
+
+### The files
+
+- **Sales CSV:** `Date, Amount` required; `Customer, Category, State, Quantity` optional. Dates 2026-03-05 or
+  05/03/2026 (day first). Amounts may include `$` and commas; negatives are allowed (credits).
+- **Goals CSV:** `Goal, Month, Target, Actual` required; `Unit` optional. Month 2026-03 or 03/2026. One row
+  per goal per month (a repeat is refused). Unit `AUD` shows as dollars, `%` as a percent.
+- Any problem refuses the whole file; **an upload replaces all the data** for that chart in one transaction.
+
+### How it fits together
+
+- **Schema** (`server/db/schema/dashboard.ts`): `dashboard_sales_rows`, `dashboard_goal_rows`,
+  `dashboard_uploads` (one row per chart: file, row count, who, when). Migration `0016_minor_agent_zero.sql`.
+  No manual SQL.
+- **Pure logic** `shared/utils/dashboardData.ts` (reading and checking both files, the templates, the sales,
+  goals and project-overview figures) with 10 tests in `tests/dashboardData.test.ts`. It reuses the PIM CSV
+  reader.
+- **Server** `server/utils/dashboardCharts.ts`; **API** `server/api/dashboard/charts/` (`sales`, `goals` for
+  anyone signed in; `projects` needs a Projects role) and `server/api/admin/dashboard-data/` (`index.get`,
+  `[kind].post` with `apply: false` to check only; owner only).
+- **Screens:** `app/components/dashboard/` `SalesOverview`, `GoalsOverview`, `ProjectOverview`,
+  `ChartDataUpload`; `app/pages/admin/dashboard-data.vue`; `app/composables/useChartTheme.ts` (colours from
+  the app's CSS variables, so light and dark mode both work). Charts use `chart.js` and `vue-chartjs`.
+
+### One-time setup after applying this step
+
+1. `pnpm db:migrate` (migration 0016, only adds tables). **Run it before pushing the code.** (Already applied to
+   the real database during the Step.)
+2. `pnpm install` picks up the two new packages.
+3. Upload real files on Manage chart data. **The database currently holds made-up sample sales and goals data**
+   from testing; the first real upload replaces it.
+
+### Known limitations (fine for the demo)
+
+- Uploads replace everything; there is no history of earlier uploads and no way to add to existing data.
+- The goal's latest month is used for its bar; there is no choice of period, no year or customer filters.
+- "So far this year" uses the Malaysian "today"; amounts are treated as AUD.
+- Only the owner uploads; no automatic feed from an accounting system.
+- Project overview counts only open projects; closed projects are left out.
+
+**Verified:** `pnpm lint`, `pnpm typecheck`, `pnpm test` (200 tests) and `pnpm build` pass. Claude called the new
+routes in the signed-in browser pane against the real Supabase, did real uploads of made-up sample files,
+looked at all three tiles with a temporary project (since deleted) in light and dark mode and at phone width
+(no sideways scrolling). **Not verified by Claude:** the dashboard and Manage chart data as a non-owner, and
+without Projects or Leave access (Navin's multi-account test is the end-to-end check).

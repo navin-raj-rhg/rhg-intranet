@@ -20,6 +20,8 @@ const isOwner = computed(() => !!authStore.profile?.isOwner)
 // The "Away today" tile needs access to Leave Applications (the launcher list
 // only contains tools this user can open).
 const canSeeLeave = (tools ?? []).some(t => t.id === 'leave-applications')
+// The "Project overview" tile needs access to Projects, the same rule as its API.
+const canSeeProjects = (tools ?? []).some(t => t.id === 'projects')
 
 const { data: pendingUsers, refresh: refreshPending } = await useAsyncData('pending-users', () =>
   isOwner.value
@@ -73,13 +75,6 @@ const myTasksText = computed(() => {
   const base = `${n} ${n === 1 ? 'task is' : 'tasks are'} assigned to you and ready to start.`
   return myTasksOverdue.value ? `${base} ${myTasksOverdue.value} ${myTasksOverdue.value === 1 ? 'is' : 'are'} overdue.` : base
 })
-
-// Filled with real charts in Step 19.
-const overviewPlaceholders = [
-  { title: 'Sales overview', icon: 'i-lucide-chart-column', text: 'Placeholder: charts from uploaded sales data will appear here.' },
-  { title: 'Project overview', icon: 'i-lucide-kanban', text: 'Placeholder: a summary of projects will appear here.' },
-  { title: 'Goals overview', icon: 'i-lucide-target', text: 'Placeholder: charts from uploaded goals data will appear here.' }
-]
 
 async function claimOwner() {
   claimingOwner.value = true
@@ -207,26 +202,11 @@ async function claimOwner() {
       </div>
     </div>
 
-    <!-- Second row: overview placeholders, made real in Step 19 -->
-    <div class="mt-4 grid gap-4 lg:grid-cols-3">
-      <UCard
-        v-for="w in overviewPlaceholders"
-        :key="w.title"
-        :data-testid="`placeholder-${w.title.toLowerCase().replace(' ', '-')}`"
-      >
-        <template #header>
-          <div class="flex items-center gap-2">
-            <UIcon
-              :name="w.icon"
-              class="size-5 text-muted"
-            />
-            <span class="font-medium">{{ w.title }}</span>
-          </div>
-        </template>
-        <p class="text-sm text-muted">
-          {{ w.text }}
-        </p>
-      </UCard>
+    <!-- Second row: Sales, Project and Goals overviews (Step 19). Project overview needs Projects access. -->
+    <div class="mt-4 grid items-start gap-4 lg:grid-cols-3">
+      <DashboardSalesOverview />
+      <DashboardProjectOverview v-if="canSeeProjects" />
+      <DashboardGoalsOverview />
     </div>
 
     <!-- Launcher: tools the current user can access -->
@@ -294,6 +274,14 @@ async function claimOwner() {
         color="neutral"
         icon="i-lucide-calendar-days"
         label="Manage events"
+        class="ml-2"
+      />
+      <UButton
+        to="/admin/dashboard-data"
+        variant="outline"
+        color="neutral"
+        icon="i-lucide-chart-column"
+        label="Manage chart data"
         class="ml-2"
       />
     </div>
