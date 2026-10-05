@@ -123,7 +123,7 @@ The short version of these rules is in `CLAUDE.md` at the repo root.
 - **File storage:** Cloudflare R2 (S3-compatible), accessed via presigned URLs
 - **PDF generation:** `pdfkit` (expense-claims payroll report; inspection reports)
 - **Tests:** `pnpm test` runs Node's built-in test runner over `tests/*.test.ts`
-  (pure logic only, no database) - **212 tests as of Step 20**.
+  (pure logic only, no database) - **216 tests as of the automatic holidays change**.
 - **Package manager:** pnpm
 - **Hosting:** Railway (Node server), auto-deploying from `main`
 
@@ -441,8 +441,15 @@ sub-step when Navin asked. The repo `README.md` has the technical write-up.
   refused everywhere and hidden from lists and manager pickers; history and pending
   items stay; reactivation is one click. Refused for owners, for yourself, and while the
   person still manages active employees. Navin may add one or two more owners later.
-- **Leave public holidays:** one company-wide national list the owner enters (starts
-  empty). A holiday on a working day is skipped when counting; leave already applied for
+- **Leave public holidays:** one company-wide national list the owner enters. **Malaysian +
+  Australian national holidays are added automatically** (after Step 21): for this year and next,
+  once per year (recorded in `leave_holiday_years_synced`, so removed/edited ones don't return and
+  existing dates are never overwritten), by `server/utils/leaveHolidays.ts` the first time the list
+  is read each day. Source is the offline `date-holidays` package (`shared/utils/autoHolidays.ts`,
+  tested in `tests/autoHolidays.test.ts`); shared dates are merged ("New Year's Day (MY, AU)"),
+  Malay names shown in English, national days only (no King's Birthday or state days). Moon-based
+  Malaysian dates are calculated and may need a manual edit when announced. Nager.Date was
+  rejected: it has no Malaysian data. Adding, editing and removing by hand still works. A holiday on a working day is skipped when counting; leave already applied for
   keeps its own copy of the holidays it skipped, so nothing old changes. Shown in blue on
   the team calendar.
 - **Inspection:** a reviewer can't close or send back a report they started (the owner is
@@ -480,7 +487,7 @@ manual SQL.
 - Extra owners can only be set in the database; there is no screen for it.
 - Deactivating blocks the person inside the app only (their Supabase login is untouched);
   the Leave calendar still shows a deactivated person's approved leave.
-- Public holidays are one national list - no state holidays.
+- Public holidays are one national list - no state holidays. Automatic Malaysian dates that depend on the moon are estimates; edit when the government announces them.
 - Storage clean-up works on the oldest 200 files per scan.
 - Chinese / non-Western PDF text prints as "?"; HEIC photos still aren't drawn in PDFs.
 - Claude could only check the login page and header in the browser pane (the screens need
@@ -927,7 +934,7 @@ README's Step 10 section.
 - No Microsoft SSO yet - planned before company-wide launch.
 - `NUXT_SUPABASE_DB_URL` (direct connection) is intentionally not set on
   Railway - migrations must be run manually from a local machine after any
-  schema change; a push alone does not apply them (latest: `0017`; Steps 14 and 15 added none, Step 16 added `0012` and `0013`, Step 17 added `0014`, Step 18 added `0015`, Step 19 added `0016`, Step 20 added `0017`). **Order for a
+  schema change; a push alone does not apply them (latest: `0018`, automatic holidays; Steps 14 and 15 added none, Step 16 added `0012` and `0013`, Step 17 added `0014`, Step 18 added `0015`, Step 19 added `0016`, Step 20 added `0017`). **Order for a
   release with a migration that ADDS something: run `pnpm db:migrate` first, then push**
   (the code needs the new tables or columns). **When a migration DROPS something, push
   first, wait for the deploy, then migrate** (as with `0011`). Manual SQL in `server/db/manual-sql/` (001 new-user trigger, 002

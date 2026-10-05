@@ -993,7 +993,17 @@ committing and pushing sub-step by sub-step when Navin asked.
   names the holidays skipped; the team calendar shows them in blue and "Away today"
   mentions one. Each application keeps its own copy of the holidays it skipped
   (`leave_applications.holiday_dates`), so changing the list never changes old leave.
-  Migration `0010`. Starts empty: the owner enters the dates.
+  Migration `0010`. The owner can add, edit and remove dates by hand.
+  **Automatic Malaysian + Australian holidays** (added later, migration `0018`): the
+  national holidays for this year and next are filled in once per year the first time the
+  list is read each day. A year already filled in is recorded in
+  `leave_holiday_years_synced`, so a holiday the owner removes or edits does not come back
+  and dates the owner entered are never overwritten. Dates come from the offline
+  `date-holidays` package (`shared/utils/autoHolidays.ts`); a date shared by both countries
+  becomes one entry such as "New Year's Day (MY, AU)". National days only (no King's
+  Birthday or state days), and moon-based Malaysian dates are calculated, so edit one if the
+  government announces a different day. Verified with `pnpm lint`, `pnpm typecheck` and
+  `pnpm test` (216 tests).
 - **13.9 Inspection:** a reviewer can't close or send back a report they started
   (the owner can); **Duplicate** on the template list makes "Copy of ..." (switched off).
 - **13.10 Storage:** deleting a claim or replacing its receipt now deletes the old
@@ -1027,7 +1037,7 @@ committing and pushing sub-step by sub-step when Navin asked.
   screen for it yet. Nothing assumes a single owner.
 - **Deactivating** blocks the person inside the app only; their Supabase login is
   untouched. The Leave calendar still shows a deactivated person's approved leave.
-- **Public holidays** are one national list; there are no state holidays.
+- **Public holidays** are one national list; there are no state holidays. Automatic Malaysian lunar dates are estimates.
 - **Remembered logins:** a login cancelled in Supabase can keep working for up to a minute.
 - **Storage clean-up** shows and deletes the oldest 200 files per scan (scan again for more).
 - **Chinese / non-Western text** still prints as "?" in PDFs (Navin chose to skip a font).

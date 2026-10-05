@@ -156,6 +156,12 @@ export const leavePublicHolidays = pgTable('leave_public_holidays', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 })
 
+/** Years already filled with the automatic Malaysian + Australian holidays (each only once). */
+export const leaveHolidayYearsSynced = pgTable('leave_holiday_years_synced', {
+  year: integer('year').primaryKey(),
+  syncedAt: timestamp('synced_at', { withTimezone: true }).notNull().defaultNow()
+})
+
 export const leaveBalanceAdjustments = pgTable(
   'leave_balance_adjustments',
   {

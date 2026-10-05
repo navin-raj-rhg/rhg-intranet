@@ -121,6 +121,11 @@ async function confirmDelete() {
           Holidays on a working day are not counted as leave and show on the team calendar. Changes only apply to
           leave applied for from now on - leave already applied for keeps the holidays it was made with.
         </p>
+        <p class="mt-1 text-sm text-muted">
+          Malaysian and Australian national holidays for this year and next are added automatically (once - if you
+          edit or remove one it stays that way). State days and any date the government moves are for you to add or
+          adjust below.
+        </p>
       </div>
     </template>
 
